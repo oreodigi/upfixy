@@ -1,0 +1,16 @@
+{
+  "name": "upfixy",
+  "private": true,
+  "workspaces": [
+    "packages/core",
+    "db",
+    "web"
+  ],
+  "scripts": {
+    "db:migrate": "npm run migrate -w db",
+    "db:reset": "npm run reset -w db",
+    "test": "npm test -w packages/core && npm test -w db && npm test -w web && npm run typecheck -w web && npm run typecheck -w packages/core",
+    "build": "npm run build -w web",
+    "dev": "npm run dev -w web"
+  }
+}
