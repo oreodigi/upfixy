@@ -3,5 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173, host: '127.0.0.1' },
+  server: {
+    port: 5173,
+    host: '127.0.0.1',
+    // Same-origin in development: the Laravel API runs on :8000.
+    proxy: { '/api': 'http://127.0.0.1:8000' },
+  },
 });

@@ -177,7 +177,10 @@ export function SiteList({ sites, clients }: { sites: Site[]; clients?: Client[]
 }
 
 /** Work queue: workflow lanes are separate from health and moved by a validated action, never by drag alone. */
-export function WorkBoard({ tickets, onMove }: { tickets: Ticket[]; onMove: (id: string, to: TicketState) => string | null }) {
+export function WorkBoard({ tickets, onMove }: {
+  tickets: Ticket[];
+  onMove: (id: string, to: TicketState) => Promise<string | null> | string | null;
+}) {
   const [message, setMessage] = useState<string | null>(null);
   return (
     <>
@@ -192,13 +195,13 @@ export function WorkBoard({ tickets, onMove }: { tickets: Ticket[]; onMove: (id:
                 {inLane.map((t) => (
                   <article key={t.id} className="card ticket">
                     <h3>{t.title}</h3>
-                    <p className="card__meta"><span className="host">{t.host}</span>, {t.client}</p>
+                    <p className="card__meta"><span className="host">{t.host}</span>{t.client ? `, ${t.client}` : ''}</p>
                     <p className="card__meta">{t.assignee ? `Assigned to ${t.assignee}` : 'Unassigned'}{t.hasApproval ? ', approval recorded' : ''}</p>
                     <label className="move">
                       <span>Move to</span>
-                      <select value="" onChange={(e) => {
+                      <select value="" onChange={async (e) => {
                         const to = e.target.value as TicketState;
-                        const err = onMove(t.id, to);
+                        const err = await onMove(t.id, to);
                         setMessage(err ? `Not moved: ${err}` : `Moved "${t.title}" to ${TICKET_LABELS[to]}.`);
                       }}>
                         <option value="" disabled>Choose a stage</option>

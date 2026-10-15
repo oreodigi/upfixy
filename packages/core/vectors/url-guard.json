@@ -1,0 +1,269 @@
+{
+ "_note": "Shared by packages/core (TypeScript) and api (PHP) tests. Change behaviour here, then make both pass.",
+ "normalize": [
+  {
+   "input": "",
+   "code": "empty"
+  },
+  {
+   "input": "ftp://example.com",
+   "code": "scheme"
+  },
+  {
+   "input": "file:///etc/passwd",
+   "code": "scheme"
+  },
+  {
+   "input": "javascript:alert(1)",
+   "code": "scheme"
+  },
+  {
+   "input": "gopher://example.com",
+   "code": "scheme"
+  },
+  {
+   "input": "https://user:pass@example.com",
+   "code": "credentials"
+  },
+  {
+   "input": "https://example.com:22",
+   "code": "port"
+  },
+  {
+   "input": "https://example.com:6379",
+   "code": "port"
+  },
+  {
+   "input": "http://localhost",
+   "code": "internal_name"
+  },
+  {
+   "input": "http://intranet.corp",
+   "code": "internal_name"
+  },
+  {
+   "input": "http://printer.local",
+   "code": "internal_name"
+  },
+  {
+   "input": "http://metadata",
+   "code": "single_label"
+  },
+  {
+   "input": "exa mple.com",
+   "code": "control_chars"
+  },
+  {
+   "input": "https://example.com/\u0000",
+   "code": "control_chars"
+  },
+  {
+   "input": "https://example.com\\@evil.com",
+   "code": "control_chars"
+  },
+  {
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "code": "too_long"
+  },
+  {
+   "input": "http://169.254.169.254/latest/meta-data/",
+   "code": "private_address"
+  },
+  {
+   "input": "http://127.0.0.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://10.0.0.5",
+   "code": "private_address"
+  },
+  {
+   "input": "http://172.16.1.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://192.168.1.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://100.64.0.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://0.0.0.0",
+   "code": "private_address"
+  },
+  {
+   "input": "http://2130706433",
+   "code": "private_address"
+  },
+  {
+   "input": "http://0x7f.0.0.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://0177.0.0.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://127.1",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[::1]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[::ffff:127.0.0.1]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[::ffff:a9fe:a9fe]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[fd00::1]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[fe80::1]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[64:ff9b::a00:1]",
+   "code": "private_address"
+  },
+  {
+   "input": "http://[2002:a00:1::]",
+   "code": "private_address"
+  },
+  {
+   "input": "Shop.Example.com",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "shop.example.com",
+    "port": 443,
+    "path": "/",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "example.com",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "example.com",
+    "port": 443,
+    "path": "/",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "www.example.com",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "www.example.com",
+    "port": 443,
+    "path": "/",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "http://example.com:8080/shop/?token=secret",
+   "code": "ok",
+   "target": {
+    "scheme": "http",
+    "host": "example.com",
+    "port": 8080,
+    "path": "/shop/",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "https://bücher.example/",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "xn--bcher-kva.example",
+    "port": 443,
+    "path": "/",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "http://93.184.216.34",
+   "code": "ok",
+   "target": {
+    "scheme": "http",
+    "host": "93.184.216.34",
+    "port": 80,
+    "path": "/",
+    "hostIsIp": true
+   }
+  },
+  {
+   "input": "http://[2606:4700::1111]",
+   "code": "ok",
+   "target": {
+    "scheme": "http",
+    "host": "[2606:4700::1111]",
+    "port": 80,
+    "path": "/",
+    "hostIsIp": true
+   }
+  },
+  {
+   "input": "example.com:8443/status",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "example.com",
+    "port": 8443,
+    "path": "/status",
+    "hostIsIp": false
+   }
+  },
+  {
+   "input": "data:text/html,hi",
+   "code": "scheme"
+  },
+  {
+   "input": "HTTPS://EXAMPLE.COM./",
+   "code": "ok",
+   "target": {
+    "scheme": "https",
+    "host": "example.com",
+    "port": 443,
+    "path": "/",
+    "hostIsIp": false
+   }
+  }
+ ],
+ "blocked": [
+  "10.1.2.3",
+  "127.0.0.1",
+  "169.254.169.254",
+  "::1",
+  "::",
+  "fc00::1",
+  "ff02::1",
+  "2001:db8::1",
+  "::ffff:192.168.0.1",
+  "64:ff9b::7f00:1",
+  "224.0.0.1",
+  "255.255.255.255",
+  "fe80::1%eth0",
+  "not-an-ip",
+  ""
+ ],
+ "allowed": [
+  "8.8.8.8",
+  "1.1.1.1",
+  "93.184.216.34",
+  "2606:4700:4700::1111",
+  "[2a00:1450:4009::200e]",
+  "::ffff:8.8.8.8"
+ ]
+}

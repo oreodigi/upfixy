@@ -1,0 +1,214 @@
+{
+ "_note": "Shared health vectors (FRD \u00a715.2, D-17).",
+ "site": [
+  {
+   "name": "all fresh ok",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "tls",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "healthy"
+  },
+  {
+   "name": "fresh critical wins",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "critical",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "tls",
+     "severity": "warning",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "critical"
+  },
+  {
+   "name": "stale critical is unknown",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "critical",
+     "freshness": "stale"
+    },
+    {
+     "kind": "tls",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "unknown"
+  },
+  {
+   "name": "one stale required reading",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "ok",
+     "freshness": "stale"
+    },
+    {
+     "kind": "tls",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "unknown"
+  },
+  {
+   "name": "missing required check",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "tls",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "unknown"
+  },
+  {
+   "name": "fresh warning",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "tls",
+     "severity": "warning",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "warning"
+  },
+  {
+   "name": "inconclusive reading",
+   "monitorActive": true,
+   "readings": [
+    {
+     "kind": "http",
+     "severity": "ok",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "tls",
+     "severity": "unknown",
+     "freshness": "fresh"
+    },
+    {
+     "kind": "dns",
+     "severity": "ok",
+     "freshness": "fresh"
+    }
+   ],
+   "lane": "unknown"
+  },
+  {
+   "name": "inactive never checked",
+   "monitorActive": false,
+   "readings": [],
+   "lane": "needs_setup"
+  },
+  {
+   "name": "active awaiting checks",
+   "monitorActive": true,
+   "readings": [],
+   "lane": "unknown"
+  }
+ ],
+ "rollUp": [
+  {
+   "lanes": [
+    "healthy",
+    "critical",
+    "healthy"
+   ],
+   "lane": "critical"
+  },
+  {
+   "lanes": [
+    "healthy",
+    "unknown"
+   ],
+   "lane": "unknown"
+  },
+  {
+   "lanes": [
+    "healthy",
+    "needs_setup"
+   ],
+   "lane": "unknown"
+  },
+  {
+   "lanes": [
+    "needs_setup"
+   ],
+   "lane": "needs_setup"
+  },
+  {
+   "lanes": [],
+   "lane": "needs_setup"
+  },
+  {
+   "lanes": [
+    "unknown",
+    "warning"
+   ],
+   "lane": "warning"
+  },
+  {
+   "lanes": [
+    "healthy",
+    "healthy"
+   ],
+   "lane": "healthy"
+  }
+ ]
+}

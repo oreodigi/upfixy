@@ -9,8 +9,11 @@
   "scripts": {
     "db:migrate": "npm run migrate -w db",
     "db:reset": "npm run reset -w db",
-    "test": "npm test -w packages/core && npm test -w db && npm test -w web && npm run typecheck -w web && npm run typecheck -w packages/core",
+    "test": "npm test -w packages/core && npm test -w db && npm test -w web && npm run typecheck -w web && npm run typecheck -w packages/core && npm run test:api",
     "build": "npm run build -w web",
-    "dev": "npm run dev -w web"
+    "dev": "npm run dev -w web",
+    "test:api": "cd api && php vendor/bin/phpunit",
+    "api": "cd api && php artisan serve --host=127.0.0.1 --port=8000",
+    "api:migrate": "cd api && php artisan migrate --database=pgsql_owner"
   }
 }

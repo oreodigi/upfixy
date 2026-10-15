@@ -49,7 +49,10 @@ export function normalizeTarget(raw: string): TargetResult {
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f\s\\]/.test(input)) return fail('control_chars');
 
-  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(input) ? input : `https://${input}`;
+  // A scheme is present only as "xyz://" or a known opaque scheme; otherwise
+  // "example.com:8443" would be misread as scheme "example.com".
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) || /^(javascript|data|mailto|file|about|blob|vbscript|tel):/i.test(input);
+  const withScheme = hasScheme ? input : `https://${input}`;
   let url: URL;
   try {
     url = new URL(withScheme);
