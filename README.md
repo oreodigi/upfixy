@@ -1,5 +1,8 @@
 # Upfixy
 
+> **Current product specification:** [MVP FRD v0.3](docs/FRD.md) — founder-approved AI diagnostics, narrowly scoped automated DNS fixes, security gates, acceptance tests, and decision log. This FRD is the product scope; features described in it are **not necessarily implemented**. Refer to the implementation status below and tests before claiming readiness.
+
+
 Website diagnostics and resolution SaaS for solo owners, agencies and hosting providers. This repository is the **local development build of milestone M1** (tenant foundation): a Laravel API on PostgreSQL row-level security, shared health and workflow rules, and a React web app.
 
 Requirements: *Upfixy MVP FRD v0.2.1*. Nothing here is deployed or connected to any real server, provider account or payment gateway. This repo is independent of Gods Eye: it has its own database, roles and code, and holds no credentials.
