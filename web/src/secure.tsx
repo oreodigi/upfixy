@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { TICKET_LABELS } from '@upfixy/core';
 import { ChangePreview, RepairPanel } from './pages/Repairs';
+import { PaymentBox } from './pages/Billing';
 import {
   api, ApiError, rupees, setStepUpHandler,
   type ApiAction, type ApiClaim, type ApiInvitation, type ApiMe, type ApiMember, type ApiStaff, type ApiTarget, type ApiTicketDetail, type RepairPlan,
@@ -438,8 +439,10 @@ export function TicketDialog({ ticketId, role, meId = null, onClose, onChanged }
                 <dt>Valid until</dt><dd>{new Date(q.expires_at).toLocaleString('en-IN')}</dd>
               </dl>
               {!q.ownership_verified && <p className="banner">Ownership of {q.target.host} isn't verified yet, so this can't be approved or started.</p>}
+              {q.approved && q.amount_paise > 0 && <PaymentBox ticket={t.id} approvalId={q.approval_id ?? null} amount={q.amount_paise} payer={!staff}
+                onChanged={() => { onChanged(); void load(t.id); }} />}
               {q.approved
-                ? <p className="ok">Approved{q.payment_required ? '. Waiting for payment before work can start.' : '.'}</p>
+                ? <p className="ok">Approved{q.payment_required ? '. Work starts after the payment is confirmed.' : '.'}</p>
                 : !staff && t.state === 'quote_pending' && q.ownership_verified && (
                   <button type="button" className="btn" onClick={() => void run(
                     () => api('POST', `tickets/${t.id}/approvals`, { quote_id: q.id, fingerprint: q.fingerprint }),

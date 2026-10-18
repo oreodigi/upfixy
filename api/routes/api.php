@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MfaController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\QuoteController;
 use App\Http\Controllers\Api\ConnectorController;
 use App\Http\Controllers\Api\RepairController;
@@ -26,6 +27,9 @@ use Illuminate\Support\Facades\Route;
 |   workspace  route needs an X-Workspace-Id the caller belongs to
 |   mfa.fresh  step-up: MFA enabled and a code entered in the last 15 minutes
 */
+
+// Razorpay webhooks: no session; the signature over the raw body is the authentication (SVC-004).
+Route::post('v1/webhooks/razorpay/{workspace}', \App\Http\Controllers\Api\RazorpayWebhookController::class)->middleware('throttle:120,1');
 
 // Public (no session).
 Route::prefix('v1')->middleware('tenant')->group(function () {
@@ -92,6 +96,19 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::post('connectors/{connector}/import', [ConnectorController::class, 'import'])->whereUuid('connector')->middleware('throttle:20,1');
         Route::post('connectors/{connector}/ignore', [ConnectorController::class, 'ignore'])->whereUuid('connector');
         Route::get('websites/{website}/providers', [ConnectorController::class, 'forWebsite'])->whereUuid('website');
+
+        // M6 payments (SVC-002…005). Razorpay TEST mode only until the payment model is signed off.
+        Route::get('billing/merchant', [PaymentController::class, 'merchant']);
+        Route::put('billing/merchant', [PaymentController::class, 'saveMerchant'])->middleware('mfa.fresh');
+        Route::get('billing/payments', [PaymentController::class, 'index']);
+        Route::get('billing/coverage', [PaymentController::class, 'coverage']);
+        Route::post('billing/coverage', [PaymentController::class, 'addCoverage'])->middleware('mfa.fresh');
+        Route::post('billing/coverage/{coverage}/revoke', [PaymentController::class, 'revokeCoverage'])->whereUuid('coverage')->middleware('mfa.fresh');
+        Route::post('approvals/{approval}/checkout', [PaymentController::class, 'checkout'])->whereUuid('approval')->middleware('throttle:20,1');
+        Route::post('payments/{order}/client-confirm', [PaymentController::class, 'clientConfirm'])->whereUuid('order')->middleware('throttle:20,1');
+        Route::post('payments/{order}/refunds', [PaymentController::class, 'refund'])->whereUuid('order')->middleware('mfa.fresh');
+        Route::get('tickets/{ticket}/payments', [PaymentController::class, 'forTicket'])->whereUuid('ticket');
+        Route::get('receipts/{receipt}', [PaymentController::class, 'receipt'])->whereUuid('receipt');
 
         // M7 controlled repairs (FIX-003..005)
         Route::get('websites/{website}/dns-connections', [RepairController::class, 'connections'])->whereUuid('website');

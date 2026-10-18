@@ -73,6 +73,9 @@ beforeEach(async () => {
   id.siteY = (await one(owner, "INSERT INTO websites(workspace_id, client_id, display_name) VALUES ($1, $2, 'y.example') RETURNING id", [id.wsA, id.clientY])).id;
   id.yTarget = (await one(owner, "INSERT INTO monitor_targets(workspace_id, website_id, scheme, host, port, state) VALUES ($1,$2,'https','y.example',443,'active') RETURNING id", [id.wsA, id.siteY])).id;
   id.ticket = (await one(owner, "INSERT INTO tickets(workspace_id, website_id, title) VALUES ($1,$2,'t') RETURNING id", [id.wsA, id.site])).id;
+  // M6: ₹0 provider-covered quotes need an active coverage contract.
+  id.coverage = (await one(owner, `INSERT INTO coverage_contracts(workspace_id, client_id, reference, scope, valid_from, valid_until, created_by)
+    VALUES ($1, $2, 'AMC-1', 'Hosting AMC', current_date - 1, current_date + 365, $3) RETURNING id`, [id.wsA, id.clientX, id.olive])).id;
 });
 
 /** Verify ownership of a host the way production does: API challenge, worker check. */
@@ -90,9 +93,10 @@ async function moveTicket(...states) {
 async function issueQuote(userId = id.tina, extra = {}) {
   const q = { action: 'dns.record_fix', target: id.apex, amount: null, description: 'Fix A record', ...extra };
   return as(userId, id.wsA, (c) => one(c,
-    `INSERT INTO quotes(workspace_id, ticket_id, monitor_target_id, action_code, description, amount_paise, issued_by, fingerprint, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, repeat('0', 64), $8) RETURNING *`,
-    [id.wsA, id.ticket, q.target, q.action, q.description, q.amount ?? 1, userId, q.expires ?? null]));
+    `INSERT INTO quotes(workspace_id, ticket_id, monitor_target_id, action_code, description, amount_paise, params, issued_by, fingerprint, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $9::jsonb, $7, repeat('0', 64), $8) RETURNING *`,
+    [id.wsA, id.ticket, q.target, q.action, q.description, q.amount ?? 1, userId, q.expires ?? null,
+     JSON.stringify(q.action === 'provider.covered_fix' ? { coverage_id: id.coverage } : {})]));
 }
 
 const approve = (userId, quote, fingerprint = quote.fingerprint) => as(userId, id.wsA, (c) => c.query(
@@ -632,5 +636,35 @@ describe('workspace removal (NFR-14)', () => {
     // Blocked either by the quote's immutable target reference or by the append-only quote itself.
     await expect(owner.query('DELETE FROM workspaces WHERE id = $1', [id.wsA])).rejects.toThrow(/append-only|violates foreign key/);
     expect((await one(owner, 'SELECT count(*)::int AS n FROM quotes')).n).toBe(1);
+  });
+});
+
+describe('M4 connectors and M6 payments: grants', () => {
+  it('the app role can never read sealed provider tokens or merchant secrets', async () => {
+    await expect(as(id.olive, id.wsA, (c) => c.query('SELECT secret_sealed FROM connectors'))).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query('SELECT key_secret_enc FROM merchant_profiles'))).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query('SELECT webhook_secret_enc FROM merchant_profiles'))).rejects.toThrow(/permission denied/);
+  });
+
+  it('the app role cannot mark a payment verified or write receipts', async () => {
+    await expect(as(id.olive, id.wsA, (c) => c.query('UPDATE approvals SET payment_verified = true'))).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query("UPDATE payment_orders SET status = 'paid_verified'"))).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query("SELECT payment_captured(gen_random_uuid(), 'order_x', 'pay_x', 1, 'INR', 'k')"))).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query("SELECT worker_connector_synced(gen_random_uuid(), 1, '[]')"))).rejects.toThrow(/permission denied/);
+  });
+
+  it('the worker role reaches connectors and payments only through functions', async () => {
+    for (const sql of ['SELECT * FROM connectors', 'SELECT * FROM connector_assets', 'SELECT * FROM merchant_profiles', 'SELECT * FROM payment_orders']) {
+      await expect(worker.query(sql)).rejects.toThrow(/permission denied/);
+    }
+  });
+
+  it('live payments are refused by the database, even with no control row', async () => {
+    await owner.query(`INSERT INTO merchant_profiles(workspace_id, legal_name, razorpay_key_id, key_secret_enc, webhook_secret_enc, updated_by)
+                       VALUES ($1, 'A Merchant', 'rzp_test_AbCdEf123456', 'enc', 'enc', $2)`, [id.wsA, id.olive]);
+    await expect(owner.query("UPDATE merchant_profiles SET mode = 'live', razorpay_key_id = 'rzp_live_AbCdEf123456'")).rejects.toThrow(/live payments are not enabled/);
+    await owner.query('DELETE FROM payment_controls');
+    await expect(owner.query("UPDATE merchant_profiles SET mode = 'live', razorpay_key_id = 'rzp_live_AbCdEf123456'")).rejects.toThrow(/live payments are not enabled/);
+    await owner.query("INSERT INTO payment_controls(live_allowed, reason) VALUES (false, 'restored by test')");
   });
 });

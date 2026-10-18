@@ -27,6 +27,7 @@ class QuoteApprovalTest extends TestCase
         $this->assign($f['ws'], $f['other'], $f['cara']);
         [$f['site'], $f['target']] = $this->makeSite($f['ws'], $f['client'], 'shop.mitra.example');
         $f['ticket'] = $this->makeTicket($f['ws'], $f['site'], 'investigating');
+        $f['coverage'] = $this->cover($f['ws'], $f['client']);
         $this->f = $f;
     }
 

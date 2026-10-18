@@ -25,7 +25,8 @@ class CrossTenantSweepTest extends TestCase
         'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
         'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs',
         'diagnostic_runs', 'findings', 'ai_analyses', 'dns_connections', 'repair_drafts', 'repair_attempts', 'repair_events', 'repair_controls',
-        'connectors', 'connector_assets', 'connector_events'];
+        'connectors', 'connector_assets', 'connector_events',
+        'merchant_profiles', 'coverage_contracts', 'payment_orders', 'payment_receipts', 'refunds', 'payment_alerts', 'payment_webhook_inbox'];
 
     protected function setUp(): void
     {
@@ -43,6 +44,7 @@ class CrossTenantSweepTest extends TestCase
         [$v['site'], $v['target']] = $this->makeSite($v['ws'], $v['client'], 'victim-secret.example');
         $v['claim'] = $this->verifyOwnership($v['alice'], $v['ws'], $v['site'], 'victim-secret.example');
         $v['ticket'] = $this->makeTicket($v['ws'], $v['site'], 'investigating');
+        $v['coverage'] = $this->cover($v['ws'], $v['client']);
         $q = $this->api($v['alice'], $v['ws'], 'POST', "tickets/{$v['ticket']}/quotes",
             ['monitor_target_id' => $v['target'], 'action_code' => 'provider.covered_fix', 'description' => 'Victim work'])->assertCreated();
         $v['quote'] = $q->json('id');
@@ -115,6 +117,21 @@ class CrossTenantSweepTest extends TestCase
              VALUES (?, ?, 'domain', 'victim-hidden.example', 'victim-hidden.example', '{\"plan\": \"Victim work\"}', 1) RETURNING id", [$v['ws'], $v['connector']])->id;
         $this->owner()->insert("INSERT INTO connector_assets(workspace_id, connector_id, kind, external_id, name, facts, last_seen_sync, import_state, website_id)
              VALUES (?, ?, 'account', 'victim', 'victim-secret.example', '{\"plan\": \"Victim work\"}', 1, 'imported', ?)", [$v['ws'], $v['connector'], $v['site']]);
+        // M6: merchant profile, a paid order with a receipt and a refund.
+        $this->owner()->insert("INSERT INTO merchant_profiles(workspace_id, legal_name, razorpay_key_id, key_secret_enc, webhook_secret_enc, updated_by)
+             VALUES (?, 'Victim Merchant LLP', 'rzp_test_VictimKey001', ?, ?, ?)",
+            [$v['ws'], \Illuminate\Support\Facades\Crypt::encryptString('victim-key-secret'), \Illuminate\Support\Facades\Crypt::encryptString('victim-hook-secret'), $v['alice']->id]);
+        $v['order'] = $this->owner()->selectOne(
+            "INSERT INTO payment_orders(workspace_id, ticket_id, quote_id, approval_id, amount_paise, mode, merchant_key_id, merchant_name, provider_order_id,
+                                        provider_payment_id, status, idempotency_key, created_by, paid_at)
+             VALUES (?, ?, ?, ?, 10000, 'test', 'rzp_test_VictimKey001', 'Victim Merchant LLP', 'order_Victim000001', 'pay_Victim000001', 'paid_verified',
+                     'victim-idem-0001', ?, now()) RETURNING id", [$v['ws'], $v['repair_ticket'], $rq->id, $v['approval'], $v['alice']->id])->id;
+        $v['receipt'] = $this->owner()->selectOne(
+            "INSERT INTO payment_receipts(workspace_id, order_id, number, seller_name, description, action_code, amount_paise, currency, tax_note, mode, provider_payment_id)
+             VALUES (?, ?, 'VIC-2026-000001', 'Victim Merchant LLP', 'Victim work', 'dns.record_fix', 10000, 'INR', 'n/a', 'test', 'pay_Victim000001') RETURNING id",
+            [$v['ws'], $v['order']])->id;
+        $this->owner()->insert("INSERT INTO refunds(workspace_id, order_id, amount_paise, reason, requested_by) VALUES (?, ?, 100, 'Victim work refund', ?)",
+            [$v['ws'], $v['order'], $v['alice']->id]);
         $this->v = $v;
     }
 
@@ -152,6 +169,11 @@ class CrossTenantSweepTest extends TestCase
             'GET api/v1/websites/{website}/providers' => [],
             'POST api/v1/connectors/{connector}/rotate' => ['api_token' => 'attacker-token-00000000'],
             'POST api/v1/connectors/{connector}/import', 'POST api/v1/connectors/{connector}/ignore' => ['asset_ids' => [$v['asset']]],
+            'POST api/v1/billing/coverage/{coverage}/revoke', 'GET api/v1/tickets/{ticket}/payments', 'GET api/v1/receipts/{receipt}' => [],
+            'POST api/v1/approvals/{approval}/checkout' => ['idempotency_key' => 'attacker-idem-01'],
+            'POST api/v1/payments/{order}/client-confirm' => ['razorpay_payment_id' => 'pay_Victim000001', 'razorpay_order_id' => 'order_Victim000001',
+                'razorpay_signature' => str_repeat('a', 64)],
+            'POST api/v1/payments/{order}/refunds' => ['amount_paise' => 100, 'reason' => 'attacker refund'],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -175,6 +197,9 @@ class CrossTenantSweepTest extends TestCase
             'approval' => $this->v['approval'],
             'attempt' => $this->v['attempt'],
             'connector' => $this->v['connector'],
+            'coverage' => $this->v['coverage'],
+            'order' => $this->v['order'],
+            'receipt' => $this->v['receipt'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }
@@ -185,6 +210,8 @@ class CrossTenantSweepTest extends TestCase
         $out = [];
         foreach (Route::getRoutes() as $r) {
             if (!str_starts_with($r->uri(), 'api/v1/') || !str_contains($r->uri(), '{')) continue;
+            // Provider webhooks carry no session; their only authentication is the signature (PaymentsTest).
+            if (str_starts_with($r->uri(), 'api/v1/webhooks/')) continue;
             foreach ($r->methods() as $m) {
                 if (!in_array($m, ['HEAD', 'OPTIONS'], true)) $out[] = [$m, $r->uri()];
             }
@@ -207,7 +234,8 @@ class CrossTenantSweepTest extends TestCase
         $this->assertGreaterThanOrEqual(20, count($routes), 'route discovery looks broken');
         $before = $this->snapshot();
         $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'victim-cf-token-secret', 'victim-ray', 'Victim DNS change', 'alice@test.local', 'pending@test.local',
-            'Victim view', $this->v['fingerprint'], 'victim-hidden.example', 'panel.victim.example', 'victim-whm-sealed'];
+            'Victim view', $this->v['fingerprint'], 'victim-hidden.example', 'panel.victim.example', 'victim-whm-sealed',
+            'Victim Merchant', 'VIC-2026', 'order_Victim', 'pay_Victim', 'AMC-TEST-1'];
 
         foreach ($routes as [$method, $uri]) {
             $path = preg_replace_callback('/\{(\w+)\}/', fn ($m) => $this->param($m[1]), substr($uri, strlen('api/v1/')));

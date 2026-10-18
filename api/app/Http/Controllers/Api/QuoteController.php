@@ -25,17 +25,34 @@ class QuoteController
             'description' => ['required', 'string', 'max:1000'],
             'amount_paise' => ['nullable', 'integer', 'min:1', 'max:100000000'], // custom work only; ignored otherwise
             'params' => ['nullable', 'array'],
+            'coverage_id' => ['nullable', 'uuid'],
         ]);
-        if (!DB::selectOne('SELECT 1 AS x FROM tickets WHERE id = ?', [$ticket])) abort(404);
+        $tk = DB::selectOne('SELECT website_id FROM tickets WHERE id = ?', [$ticket]);
+        if (!$tk) abort(404);
         if (!in_array(TenantContext::role(), ['owner', 'admin', 'technician'], true)) {
             Audit::record('quote.create', 'denied', 'ticket', $ticket);
             abort(403, 'Only staff can issue quotes.');
+        }
+        // ₹0 provider-covered work names the coverage contract it relies on (SVC-002, §19.1). When staff
+        // don't pick one, the most specific active contract for this website is used; none → refused.
+        $params = $data['params'] ?? [];
+        unset($params['coverage_id']);
+        $tier = DB::selectOne('SELECT tier FROM action_catalog WHERE code = ? AND active', [$data['action_code']])?->tier;
+        if ($tier === 'provider_covered') {
+            $cov = $data['coverage_id'] ?? DB::selectOne(
+                'SELECT c.id FROM coverage_contracts c WHERE coverage_active(c.id, ?) ORDER BY c.website_id IS NULL, c.valid_until DESC LIMIT 1',
+                [$tk->website_id])?->id;
+            if (!$cov) {
+                return response()->json(['message' => 'A free provider-covered fix needs an active coverage contract for this website. Add one under Billing, or quote a paid service.',
+                    'code' => 'coverage_required'], 422);
+            }
+            $params['coverage_id'] = $cov;
         }
         $q = DB::selectOne(
             "INSERT INTO quotes(workspace_id, ticket_id, monitor_target_id, action_code, description, amount_paise, params, issued_by, fingerprint, expires_at)
              VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, repeat('0', 64), NULL) RETURNING id",
             [TenantContext::workspaceId(), $ticket, $data['monitor_target_id'], $data['action_code'], $data['description'],
-                $data['amount_paise'] ?? 0, json_encode((object) ($data['params'] ?? [])), TenantContext::userId()]);
+                $data['amount_paise'] ?? 0, json_encode((object) $params), TenantContext::userId()]);
         Audit::record('quote.issued', 'allowed', 'quote', $q->id, ['ticket' => $ticket]);
         return response()->json(self::find($q->id), 201);
     }

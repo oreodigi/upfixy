@@ -51,6 +51,7 @@ const SCREENS = [
   ['agency-integrations', 'owner', 'Demo Agency', [{ goto: '/integrations' }]],
   ['agency-integration-preview', 'owner', 'Demo Agency', [{ goto: '/integrations' }, { link: 'Larihost reseller (demo)' }, { waitFor: 'Choose what to add' }]],
   ['agency-website-hosting', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /shop\.mitratraders/, nth: 0 }, { tab: 'Hosting' }, { waitFor: 'From your provider connections' }]],
+  ['agency-billing', 'owner', 'Demo Agency', [{ goto: '/billing' }, { waitFor: 'Coverage contracts' }]],
   ['agency-team', 'owner', 'Demo Agency', [{ goto: '/team' }]],
   ['settings', 'owner', 'Demo Agency', [{ goto: '/settings' }]],
   ['technician-overview', 'tech', 'Demo Agency', []],
