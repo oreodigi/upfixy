@@ -13,6 +13,7 @@ The only operation is `cloudflare.dns.update_address_record`: change the content
 - Deletions, creations and bulk edits.
 - Private, reserved, loopback or documentation addresses.
 - A change where the old and new values are the same.
+- Any value that isn't exactly one canonical address: no whitespace, no leading zeros, lower-case shortest IPv6, and no IPv4-mapped or IPv4-compatible IPv6 in AAAA records. These edge cases are covered by `RepairPolicyTest` (30 cases).
 
 There is no SSH, no shell, and no WHM or cPanel write.
 

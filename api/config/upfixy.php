@@ -47,6 +47,13 @@ return [
         'monthly_cost_cap_micros' => (int) env('UPFIXY_AI_MONTHLY_CAP_MICROS', 5_000_000),  // US$5 per workspace per month
         'price_in_per_mtok' => (float) env('UPFIXY_AI_PRICE_IN', 0),   // US$ per 1M tokens, which equals micro-dollars per token
         'price_out_per_mtok' => (float) env('UPFIXY_AI_PRICE_OUT', 0),
+        // Official OpenAI standard-tier prices, US$ per 1M tokens (developers.openai.com/api/docs/pricing, checked 19 Oct 2026).
+        // Used only by `upfixy:ai-eval`; production cost caps read UPFIXY_AI_PRICE_IN/OUT.
+        'price_table' => [
+            'gpt-6-luna' => ['in' => 0.10, 'out' => 0.50],
+            'gpt-6.1-sol' => ['in' => 2.00, 'out' => 10.00],
+            'gpt-6-astra' => ['in' => 10.00, 'out' => 50.00],
+        ],
         'breaker_failures' => 3,
         'breaker_seconds' => 300,
     ],

@@ -49,8 +49,39 @@ final class Mfa
         return $ok ? $codes : null;
     }
 
-    /** Checks a TOTP code (or a one-time recovery code) against the enabled secret. */
+    /**
+     * Checks a TOTP code (or a one-time recovery code) against the enabled secret.
+     * 5 wrong codes in a row lock code entry (15 min, doubling, max 24 h) for every session of the user;
+     * while locked, even a correct code is refused (HTTP 429).
+     */
     public function verify(string $code): bool
+    {
+        $uid = TenantContext::userId();
+        $lock = DB::selectOne('SELECT mfa_locked_until FROM users WHERE id = ?', [$uid])?->mfa_locked_until;
+        if ($lock && strtotime($lock) > time()) {
+            Audit::record('mfa.locked', 'denied', 'user', $uid);
+            abort(response()->json(['code' => 'mfa_locked', 'locked_until' => \Carbon\Carbon::parse($lock)->toIso8601String(),
+                'message' => 'Too many incorrect codes. Code entry is locked until ' . \Carbon\Carbon::parse($lock)->format('H:i') . ' UTC.'], 429));
+        }
+        $ok = $this->check($code);
+        if ($ok) {
+            DB::select('SELECT auth_mfa_success()');
+            return true;
+        }
+        // Counted after the request ends: the failing request itself is rolled back.
+        Audit::afterRequest($uid, function () use ($uid) {
+            $until = DB::selectOne('SELECT auth_mfa_failure(?) AS u', [$uid])->u;
+            if ($until) {
+                DB::table('audit_events')->insert(['actor_id' => $uid, 'action' => 'mfa.locked_out', 'outcome' => 'denied', 'target_type' => 'user',
+                    'target_id' => $uid, 'detail' => json_encode(['until' => $until])]);
+                $email = DB::selectOne('SELECT email FROM users WHERE id = ?', [$uid])?->email;
+                if ($email) \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\SecurityNoticeMail('mfa_locked', ['until' => $until]));
+            }
+        });
+        return false;
+    }
+
+    private function check(string $code): bool
     {
         $s = $this->state();
         if (!$s?->secret_enc) return false;

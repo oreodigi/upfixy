@@ -41,6 +41,10 @@ The design has three layers. Only the first two can produce a *Confirmed* cause.
 
 All of these use a fake AI client. **No call has been made to a real OpenAI model.**
 
+## Model comparison
+
+See [AI_MODEL_EVALUATION.md](AI_MODEL_EVALUATION.md): a fixed synthetic case set, a scorer that also catches hallucinations which pass the validator, and official prices for gpt-6-luna, gpt-6.1-sol and gpt-6-astra. Live run pending an approved key.
+
 ## Open (founder, §25.8)
 
 - Model, region and data-processing terms, retention (we send `store: false`), per-analysis budget and plan quotas.

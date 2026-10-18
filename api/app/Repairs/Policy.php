@@ -26,10 +26,15 @@ final class Policy
 
     public static function refuseContent(string $type, string $proposed, string $current): ?string
     {
-        $p = strtolower(trim($proposed));
+        // Exactly one canonical address: no whitespace, no leading zeros, lower-case IPv6 in shortest form.
+        $p = $proposed;
         $flag = $type === 'A' ? FILTER_FLAG_IPV4 : FILTER_FLAG_IPV6;
         if (!filter_var($p, FILTER_VALIDATE_IP, $flag)) return "the new value must be a valid " . ($type === 'A' ? 'IPv4' : 'IPv6') . ' address';
         if ($p !== inet_ntop(inet_pton($p))) return 'the new value must be written in canonical form';
+        // An AAAA record must hold a real IPv6 address, not an IPv4 address in IPv6 clothing (::ffff:a.b.c.d, ::a.b.c.d).
+        if ($type === 'AAAA' && (str_starts_with($p, '::ffff:') || preg_match('/^::\d+\.\d+\.\d+\.\d+$/', $p))) {
+            return 'an AAAA record must hold a native IPv6 address';
+        }
         if (UrlGuard::isBlockedAddress($p)) return 'the new value is a private or reserved address';
         if ($p === strtolower($current)) return 'the record already has this value';
         return null;

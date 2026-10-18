@@ -245,6 +245,16 @@ class DiagnosticsTest extends TestCase
         $this->assertCount(3, $this->ai->payloads, 'breaker open: the model is not called');
     }
 
+    public function test_an_unexpected_ai_crash_keeps_the_measured_report(): void // Task 5: AI-service failure scenarios
+    {
+        $this->ai->respond = fn () => new \RuntimeException('connection reset by peer at byte 912');
+        $this->reading('http', 'critical', 'HTTP_503', ['status' => 503], 1);
+        $r = $this->report($this->diagnose()->assertCreated()->json('id'));
+        $this->assertSame('unavailable', $r->json('ai.status'));
+        $this->assertNotEmpty($r->json('observations'));
+        $this->assertStringNotContainsString('byte 912', $r->getContent()); // internal error text never reaches the customer
+    }
+
     public function test_invalid_or_unsafe_answers_are_rejected_and_versioned(): void // AC-DX-006.1
     {
         $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class); // 11 runs; the route allows 10/min

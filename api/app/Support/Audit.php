@@ -26,8 +26,9 @@ final class Audit
             'target_type' => $targetType,
             'target_id' => $targetId,
             'ip' => request()?->ip(),
-            'trace_id' => request()?->header('X-Request-Id'),
-            'detail' => json_encode($detail),
+            // Server-generated per request; a client-sent X-Request-Id is kept only as a hint in detail.
+            'trace_id' => self::traceId(),
+            'detail' => json_encode(self::clientTrace() + $detail),
         ];
         if ($outcome === 'denied') {
             self::$deferred[] = $row;
@@ -36,9 +37,43 @@ final class Audit
         DB::table('audit_events')->insert($row);
     }
 
+    /** @var array<int, array{0: ?string, 1: \Closure}> work that must survive the request's rollback */
+    private static array $after = [];
+
+    public static function traceId(): ?string
+    {
+        $r = request();
+        if (!$r) return null;
+        if (!$r->attributes->has('upfixy_trace')) $r->attributes->set('upfixy_trace', (string) \Illuminate\Support\Str::uuid());
+        return $r->attributes->get('upfixy_trace');
+    }
+
+    private static function clientTrace(): array
+    {
+        $h = request()?->header('X-Request-Id');
+        return is_string($h) && preg_match('/^[A-Za-z0-9._:-]{1,64}$/', $h) ? ['client_request_id' => $h] : [];
+    }
+
+    /**
+     * Run $fn after the request transaction ends, in its own transaction, as $userId (no workspace).
+     * Used for security counters (failed MFA codes) that must count even though the request fails.
+     */
+    public static function afterRequest(?string $userId, \Closure $fn): void
+    {
+        self::$after[] = [$userId, $fn];
+    }
+
     /** Called by WithTenantContext after the request transaction has finished. */
     public static function flushDeferred(): void
     {
+        $after = self::$after;
+        self::$after = [];
+        foreach ($after as [$uid, $fn]) {
+            DB::transaction(function () use ($uid, $fn) {
+                TenantContext::apply($uid, null);
+                $fn();
+            });
+        }
         $rows = self::$deferred;
         self::$deferred = [];
         foreach ($rows as $row) {
@@ -57,5 +92,6 @@ final class Audit
     public static function discardDeferred(): void
     {
         self::$deferred = [];
+        self::$after = [];
     }
 }

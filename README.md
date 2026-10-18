@@ -11,26 +11,29 @@ Requirements: [Upfixy MVP FRD v0.3](docs/FRD.md) (M1 was built against v0.2.1; v
 | Doc | What it answers |
 | --- | --- |
 | [FRD v0.3](docs/FRD.md) | What the product must do (founder-approved scope) |
-| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | What is built per milestone, traceability FRD → code → tests → PR, and where the code differs from the FRD |
-| [Architecture](docs/ARCHITECTURE.md) | Processes, database roles, isolation and key decisions |
-| [Security](docs/SECURITY.md) | Controls, review findings S-01…S-08 and known gaps |
-| [AI diagnostics](docs/AI_DIAGNOSTICS.md) | Evidence → rules → AI contract, validator and fallback |
+| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | **Start here.** State of every feature, traceability FRD → code → tests → PR, differences from the FRD |
+| [Architecture](docs/ARCHITECTURE.md) | Processes, database roles, isolation, key decisions |
+| [Security](docs/SECURITY.md) | Controls, findings S-01…S-16, known gaps |
+| [AI diagnostics](docs/AI_DIAGNOSTICS.md) · [AI model evaluation](docs/AI_MODEL_EVALUATION.md) | Evidence → rules → AI contract; how candidate models are compared |
 | [Repair engine](docs/REPAIR_ENGINE.md) | Allowlisted Cloudflare DNS fix: gates, controls, release checklist |
+| [Payments](docs/PAYMENTS.md) | Coverage, Razorpay test-mode flow, webhooks, live lock, receipts, refunds |
+| [Backup and recovery](docs/BACKUP_RECOVERY.md) | Encrypted backups, restore drill, proposed RPO/RTO |
 | [Test results](docs/TEST_RESULTS.md) | Latest exact results and what is not yet tested |
 
 ## What's here
 
 | Path | What it is | Tests |
 | --- | --- | --- |
-| `db/migrations/` | PostgreSQL 16 schema, the single source of truth: tenancy, websites, ownership proof, delegations, tickets, quotes, approvals, invitations, audit and **row-level security** on every tenant table | 82 (as the runtime roles) |
-| `db/bootstrap/roles.sql` | Creates the four database roles with least privilege: owner (migrations), app (API), worker (monitor), executor (repairs) | |
-| `api/` | Laravel 12 API: auth with MFA, invitations, team, clients, websites, ownership proof, boards, tickets, quotes, approvals; monitor worker (`upfixy:monitor`), diagnostics with optional AI, repair executor (`upfixy:repairs`) | 234 |
+| `db/migrations/` | PostgreSQL 16 schema, the single source of truth: tenancy, websites, ownership proof, delegations, tickets, quotes, approvals, invitations, audit and **row-level security** on every tenant table | 86 (as the runtime roles) |
+| `db/bootstrap/roles.sql` | Creates the four database roles with least privilege: owner (migrations), app (API), worker (monitor, connectors, payment events), executor (repairs) | |
+| `api/` | Laravel 12 API: auth with MFA, invitations, team, clients, websites, ownership proof, boards, tickets, quotes, approvals; monitor worker (`upfixy:monitor`), read-only connectors (`upfixy:connectors`), payments (Razorpay test mode, webhooks, `upfixy:payments`), diagnostics with optional AI (`upfixy:ai-eval`), repair executor (`upfixy:repairs`), audit chain (`upfixy:audit`) | 314 |
 | `packages/core/` | Shared rules in TypeScript: URL/SSRF guard, health and client roll-up, incident debounce, ticket state machine, 46-guide issue library | 180 |
 | `packages/core/vectors/` | JSON test cases that **both** the TypeScript and PHP implementations must pass | (used by both) |
 | `web/` | React + TypeScript (Vite): real URLs for every screen; overview, client and website boards with search, lane filters and saved views, client detail, website detail (8 tabs, reading history), work queue (drag or keyboard), assignment, sign-in with MFA, team, ownership proof, quotes. Add `?demo` for the synthetic demo board | 23 |
-| `scripts/e2e.py` | 38 end-to-end checks against the running servers | |
+| `scripts/e2e.py` | 40 end-to-end checks against the running servers | |
+| `ops/backup.sh`, `ops/restore-drill.sh` | Encrypted database backup and a verified restore drill | drill passed |
 | `scripts/seed-dev.mjs` | Dev-only demo data (refuses non-local databases). `--sites 200` adds a load-test workspace | |
-| `scripts/screens.mjs` | Screenshots at 320, 390 and 1440 px, page-overflow check and axe WCAG 2.1 AA audit; exits 1 on serious findings | 22 screens × 3 |
+| `scripts/screens.mjs` | Screenshots at 320, 390 and 1440 px, page-overflow check and axe WCAG 2.1 AA audit; exits 1 on serious findings | 26 screens × 3 |
 | `scripts/keyboard.mjs` | Keyboard-only checks: skip link, navigation, moving and opening requests, dialogs, filters, Back button, deep links, Check now, Analyze, incidents | 31 |
 | `scripts/perf.mjs` | API median/p95 and board render time on throttled phone (Fast 4G, 4× CPU) | |
 | `.github/workflows/ci.yml` | Every suite on push and PR, with a throwaway PostgreSQL | |
@@ -142,10 +145,8 @@ The database enforces, independent of the API code:
 
 Full list with risks: [Implementation status](docs/IMPLEMENTATION_STATUS.md) and [Security](docs/SECURITY.md).
 
-- **Not merged.** PRs #1 → #5 are stacked and await founder review; nothing is on `main` beyond the FRD.
-- **M4 connectors** (WHM reseller, cPanel, Cloudflare read-only) need pilot test accounts.
-- **M6 payments.** `payment_verified` has no writer, so paid quotes and automated repairs cannot run outside tests.
-- **AI is off** until a model, region, retention and budget are chosen (FRD §25.8).
-- **Repairs are off** (platform flag off, global switch paused) and untested against a real Cloudflare zone.
-- **Password reset, MFA lockout, audit hash chain, workspace soft close** are not built.
-- **Real-device and screen-reader check** before pilot.
+- **Open PRs:** #8 (M4) → #10 (M6) → #11 (hardening, AI evaluation) await founder review.
+- **Real accounts needed:** pilot WHM/cPanel/Cloudflare test accounts (M4), a Razorpay sandbox (M6), an OpenAI key for the model comparison (M5), a Cloudflare test zone (M7). Nothing has been run against a real provider.
+- **Off by design:** live payments (three locks), production AI (`UPFIXY_AI_MODEL` unset), automated repairs (flag off, global switch paused).
+- **Founder decisions:** D-01, D-02, D-03, D-05, D-06, D-08, D-12, D-13, D-14, D-18, D-23, C-1…C-5, §25.8.
+- **Before pilot:** staging server, scheduled backups with off-site storage, off-host audit anchors, webhook service split, real-device accessibility check.
