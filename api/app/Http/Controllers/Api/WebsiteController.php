@@ -56,14 +56,33 @@ class WebsiteController
         ]);
         if (!DB::selectOne('SELECT 1 AS x FROM websites WHERE id = ?', [$website])) abort(404);
         $args = [$website];
+        // id is the evidence ID that diagnostics cite (FRD §25.3); detail is redacted at capture.
         $kind = '';
         if (!empty($data['kind'])) { $kind = 'AND o.check_kind = ?::check_type'; $args[] = $data['kind']; }
         $args[] = $data['limit'] ?? 50;
-        return response()->json(['data' => DB::select(
-            "SELECT o.observed_at, t.host, o.check_kind::text AS kind, o.severity::text AS severity,
-                    o.source::text AS source, o.result_code
+        $rows = DB::select(
+            "SELECT o.id, o.observed_at, t.host, o.check_kind::text AS kind, o.severity::text AS severity,
+                    o.source::text AS source, o.result_code, o.region, o.cycle_no, o.detail
                FROM observations o JOIN monitor_targets t ON t.id = o.monitor_target_id
-              WHERE t.website_id = ? {$kind} ORDER BY o.observed_at DESC LIMIT ?", $args)]);
+              WHERE t.website_id = ? {$kind} ORDER BY o.observed_at DESC LIMIT ?", $args);
+        foreach ($rows as $r) $r->detail = json_decode($r->detail, true);
+        return response()->json(['data' => $rows]);
+    }
+
+    /** KB-003 "Check now": queues a live check; the stored result keeps its own timestamp until it arrives. */
+    public function recheck(string $website): JsonResponse
+    {
+        try {
+            $n = DB::selectOne('SELECT request_recheck(?) AS n', [$website])->n;
+        } catch (\Illuminate\Database\QueryException $e) {
+            $msg = $e->errorInfo[2] ?? '';
+            if (str_contains($msg, 'not found')) abort(404);
+            if (str_contains($msg, 'billing')) abort(403, 'Billing contacts cannot run checks.');
+            throw $e;
+        }
+        return response()->json($n > 0
+            ? ['queued' => $n, 'message' => 'A live check is queued. Results usually arrive within a minute or two.']
+            : ['queued' => 0, 'message' => 'A check was requested in the last 2 minutes. Showing the latest stored results.'], 202);
     }
 
     public function store(Request $request): JsonResponse

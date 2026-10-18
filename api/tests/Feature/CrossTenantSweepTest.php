@@ -23,7 +23,7 @@ class CrossTenantSweepTest extends TestCase
     /** Tables whose contents must be byte-identical before and after the sweep. */
     private const WATCHED = ['workspaces', 'memberships', 'clients', 'client_assignments', 'websites', 'monitor_targets',
         'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
-        'saved_views'];
+        'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs'];
 
     protected function setUp(): void
     {
@@ -51,6 +51,15 @@ class CrossTenantSweepTest extends TestCase
         $v['view'] = $this->owner()->selectOne(
             "INSERT INTO saved_views(workspace_id, user_id, board, name, filters) VALUES (?, ?, 'websites', 'Victim view', '{\"q\":\"victim\"}') RETURNING id",
             [$v['ws'], $v['alice']->id])->id;
+        // M3: an open incident with an unread alert for the victim owner.
+        $v['incident'] = $this->owner()->selectOne(
+            "INSERT INTO incidents(workspace_id, website_id, monitor_target_id, root_kind, result_code, opened_at, first_failure_at, last_failure_at)
+             VALUES (?, ?, ?, 'http', 'HTTP_503', now(), now(), now()) RETURNING id", [$v['ws'], $v['site'], $v['target']])->id;
+        $v['notification'] = $this->owner()->selectOne(
+            "INSERT INTO notifications(workspace_id, user_id, incident_id, kind) VALUES (?, ?, ?, 'incident_opened') RETURNING id",
+            [$v['ws'], $v['alice']->id, $v['incident']])->id;
+        $this->owner()->insert('INSERT INTO notification_prefs(workspace_id, user_id, client_id, email, in_app) VALUES (?, ?, ?, false, true)',
+            [$v['ws'], $v['alice']->id, $v['client']]);
         $this->v = $v;
     }
 
@@ -75,6 +84,8 @@ class CrossTenantSweepTest extends TestCase
             'PATCH api/v1/views/{view}' => ['name' => 'Taken over'],
             'DELETE api/v1/views/{view}' => [],
             'DELETE api/v1/clients/{client}/assignments/{user}' => [],
+            'POST api/v1/websites/{website}/recheck', 'GET api/v1/incidents/{incident}', 'POST api/v1/incidents/{incident}/acknowledge',
+            'POST api/v1/notifications/{notification}/read' => [],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -90,6 +101,8 @@ class CrossTenantSweepTest extends TestCase
             'quote' => $this->v['quote'],
             'invitation' => $this->v['invitation'],
             'view' => $this->v['view'],
+            'incident' => $this->v['incident'],
+            'notification' => $this->v['notification'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }

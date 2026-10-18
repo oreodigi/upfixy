@@ -19,6 +19,21 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(Resolver::class, SystemResolver::class);
         $this->app->bind(HttpTransport::class, fn () => new CurlTransport(config('upfixy.egress_proxy')));
+
+        // M3 monitoring. Tests replace DnsClient, HttpFetcher and TlsInspector with fakes.
+        $m = fn (string $k) => config("upfixy.monitor.{$k}");
+        $this->app->bind(\App\Monitoring\Dns\DnsClient::class, fn () => new \App\Monitoring\Dns\UdpDnsClient($m('dns_timeout')));
+        $this->app->bind(\App\Monitoring\Http\HttpFetcher::class, fn () => new \App\Monitoring\Http\CurlFetcher(
+            $m('http_connect_timeout'), $m('http_total_timeout'), $m('http_max_bytes'), $m('user_agent'), config('upfixy.egress_proxy')));
+        $this->app->bind(\App\Monitoring\Tls\TlsInspector::class, fn () => new \App\Monitoring\Tls\StreamTlsInspector($m('tls_timeout')));
+        $this->app->bind(\App\Monitoring\DnsProbe::class, fn ($app) => new \App\Monitoring\DnsProbe($app->make(\App\Monitoring\Dns\DnsClient::class), $m('resolvers')));
+        $this->app->singleton(\App\Monitoring\ProbeHealth::class, fn ($app) => new \App\Monitoring\ProbeHealth(
+            $app->make(\App\Monitoring\Dns\DnsClient::class), $m('resolvers'), $m('canaries')));
+        $this->app->bind(\App\Monitoring\CycleRunner::class, fn ($app) => new \App\Monitoring\CycleRunner(
+            $app->make(\App\Monitoring\DnsProbe::class), $app->make(\App\Monitoring\TlsProbe::class),
+            $app->make(\App\Monitoring\HttpProbe::class), $app->make(\App\Monitoring\ProbeHealth::class), $m('retry_delays_ms')));
+        $this->app->bind(\App\Monitoring\Recorder::class, fn () => new \App\Monitoring\Recorder(
+            gethostname() . ':' . getmypid(), $m('worker_version'), $m('region')));
     }
 
     public function boot(): void

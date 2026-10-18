@@ -10,6 +10,7 @@ import { ClientsBoard, WebsitesBoard } from './pages/Boards';
 import ClientDetail from './pages/ClientDetail';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Work from './pages/Work';
+import Alerts, { AlertPrefs } from './pages/Alerts';
 
 const PENDING_INVITE = 'upfixy.pendingInvite';
 const store = {
@@ -201,6 +202,14 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   useEffect(() => { void guard(loadBoards()); }, [guard, loadBoards]);
   useEffect(() => { void guard(loadClients()); }, [guard, loadClients]);
 
+  // Unread alert count for the nav badge, refreshed each minute (ALR-001 in-app inbox).
+  const [unread, setUnread] = useState(0);
+  const loadUnread = useCallback(() => {
+    if (!ws) return;
+    api<{ unread: number }>('GET', 'notifications').then((r) => setUnread(r.unread)).catch(() => undefined);
+  }, [ws]);
+  useEffect(() => { loadUnread(); const t = window.setInterval(loadUnread, 60_000); return () => window.clearInterval(t); }, [loadUnread]);
+
   const openTicket = useCallback((id: string) => navigate({ name: 'work', ticket: id }), []);
   const report = useCallback(async (siteId: string, host: string) => {
     const title = window.prompt(`What's wrong with ${host}? Describe it in a few words.`);
@@ -225,6 +234,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
     ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work queue' : 'Issues', match: ['work'] as Route['name'][], icon: '☰' }] : []),
   ];
   const secondary: NavItem[] = [
+    { to: '/alerts', label: unread ? `Alerts (${unread})` : 'Alerts', match: ['alerts'], icon: '🔔' },
     ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
     { to: '/settings', label: 'Settings', match: ['settings'], icon: '⚙' },
   ];
@@ -284,7 +294,8 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'website' ? <WebsiteDetail id={r.id} tab={r.tab} />
             : r.name === 'work' ? <Work />
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
-            : r.name === 'settings' ? (me ? <SecurityPanel me={me} onChange={() => void loadMe()} /> : null)
+            : r.name === 'alerts' ? <Alerts onRead={loadUnread} />
+            : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /></div> : null)
             : null}
         </main>
 
@@ -292,7 +303,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
           {primary.map((n) => link(n, 'bnav'))}
           <button type="button" className="bnav" aria-expanded={more} aria-controls="more-sheet" onClick={() => setMore(!more)}
             aria-current={secondary.some(isOn) ? 'page' : undefined}>
-            <span className="nav__icon" aria-hidden="true">⋯</span><span className="nav__label">More</span>
+            <span className="nav__icon" aria-hidden="true">⋯</span><span className="nav__label">More{unread ? <span className="badge" aria-label={`${unread} unread alerts`}>{unread}</span> : null}</span>
           </button>
         </nav>
         {more && (

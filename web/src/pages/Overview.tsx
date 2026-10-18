@@ -1,7 +1,8 @@
 // SCR-02 Overview: what needs attention now. One headline, then the work.
 import { useEffect, useState } from 'react';
 import { TICKET_LABELS, type HealthLane, type TicketState } from '@upfixy/core';
-import { api, type ApiOverview } from '../api';
+import { api, type ApiIncident, type ApiOverview } from '../api';
+import { IncidentRows } from './Incidents';
 import { useWs } from '../app-context';
 import { LANES, LANE_LABEL, StatusPill, since } from '../components';
 import { HELP } from '../help';
@@ -12,9 +13,12 @@ const KIND: Record<string, string> = { http: 'Website', tls: 'SSL', dns: 'Domain
 export default function Overview() {
   const { isStaff, role, workspace, openHelp, setError } = useWs();
   const [o, setO] = useState<ApiOverview | null>(null);
+  const [incidents, setIncidents] = useState<ApiIncident[]>([]);
+  const loadIncidents = () => api<{ data: ApiIncident[] }>('GET', 'incidents?status=open').then((r) => setIncidents(r.data)).catch(() => undefined);
 
   useEffect(() => {
     api<ApiOverview>('GET', 'overview').then(setO).catch((e) => setError(e.message));
+    void loadIncidents();
   }, [workspace?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!o) return <p className="hint" role="status">Loading…</p>;
@@ -46,6 +50,14 @@ export default function Overview() {
             </a>
           ))}
         </nav>
+      )}
+
+      {incidents.length > 0 && (
+        <section className="panel-box panel-box--alert" aria-labelledby="incidents-h">
+          <h2 id="incidents-h">Open incidents ({incidents.length})</h2>
+          <p className="hint">A problem becomes an incident after three failed checks in a row, and resolves after two good ones.</p>
+          <IncidentRows incidents={incidents} onChanged={() => void loadIncidents()} />
+        </section>
       )}
 
       <div className="split">

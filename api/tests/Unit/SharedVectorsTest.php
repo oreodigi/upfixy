@@ -54,4 +54,18 @@ class SharedVectorsTest extends TestCase
             $this->assertSame($v['lane'], Health::rollUp($v['lanes']), implode('+', $v['lanes']));
         }
     }
+
+    public static function incidentCases(): iterable
+    {
+        foreach (self::vectors('incidents')['cases'] as $v) yield $v['name'] => [$v];
+    }
+
+    #[DataProvider('incidentCases')]
+    public function test_incident_debounce(array $v): void
+    {
+        $r = \App\Monitoring\IncidentDebounce::fold($v['outcomes']);
+        $this->assertSame($v['open'], $r['open']);
+        $this->assertSame($v['openedAtCycle'], $r['openedAt']);
+        $this->assertSame($v['resolvedAtCycle'], $r['resolvedAt']);
+    }
 }

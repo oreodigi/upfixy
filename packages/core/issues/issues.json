@@ -1,0 +1,374 @@
+{
+  "version": "2026-10-18.1",
+  "_doc": "KB-001/KB-002 issue library. Original Upfixy content. Every code a probe can emit must have an entry (enforced by tests). Severity is the default shown when a reading has no fresher context.",
+  "issues": {
+    "DNS_NXDOMAIN": {
+      "kind": "dns", "severity": "critical",
+      "title": "Domain name does not exist",
+      "meaning": "When browsers ask where this address lives, the internet's address book says the name does not exist. Visitors get a 'site can't be reached' error.",
+      "causes": ["The domain registration expired or was suspended", "A typo or missing record for this exact name (for example www)", "Nameservers at the registrar were changed to a provider that has no record for it"],
+      "checks": ["Look up the domain's renewal date with your registrar", "Check whether the address without 'www' (or with it) works", "Ask whether anyone changed nameservers or DNS provider recently"],
+      "next": "Renew the domain if it lapsed, or add the missing record at your DNS provider. Connect your DNS provider so Upfixy can compare records directly."
+    },
+    "DNS_SERVFAIL": {
+      "kind": "dns", "severity": "critical",
+      "title": "DNS lookups are failing",
+      "meaning": "Public DNS services tried to look up this name and gave up with an error. To most visitors the site looks like it doesn't exist.",
+      "causes": ["The domain's nameservers are not answering", "DNSSEC settings at the registrar don't match the DNS provider", "The DNS provider is having an outage"],
+      "checks": ["Check that the nameservers listed at your registrar match your DNS provider", "Ask whether DNSSEC was turned on or off recently", "Check your DNS provider's status page"],
+      "next": "Contact whoever manages the domain's DNS with the message below. If DNSSEC was changed recently, that is the first thing to check."
+    },
+    "DNS_NO_ADDRESS": {
+      "kind": "dns", "severity": "critical",
+      "title": "Name has no website address",
+      "meaning": "The domain exists, but there is no address record telling browsers which server hosts the website.",
+      "causes": ["The A/AAAA record for this exact name was deleted", "Only mail records exist for this name", "A record was moved to a different name during a migration"],
+      "checks": ["Check whether the other form of the address (with or without www) works", "Ask whether the website was recently moved to a new host"],
+      "next": "Add an address (A or AAAA) record pointing to your hosting server, or a CNAME to your hosting provider's name."
+    },
+    "DNS_ERROR": {
+      "kind": "dns", "severity": "critical",
+      "title": "DNS answered with an error",
+      "meaning": "DNS services answered, but with an error other than 'not found' or 'failed', so browsers can't get an address.",
+      "causes": ["The DNS provider refuses queries for this name", "A misconfigured DNS zone"],
+      "checks": ["Ask your DNS provider whether the zone is active", "Check whether other names on the same domain work"],
+      "next": "Send the support message below to whoever manages your DNS."
+    },
+    "DNS_INCONCLUSIVE": {
+      "kind": "dns", "severity": "unknown",
+      "title": "DNS results disagree",
+      "meaning": "Different public DNS services gave different answers, or some didn't answer. Upfixy doesn't treat that as proof of a problem, so health shows Unknown.",
+      "causes": ["A DNS change is still spreading across the internet", "One DNS service is having a temporary issue", "Nameservers are answering inconsistently"],
+      "checks": ["Wait for the next check", "Ask whether DNS was changed in the last few hours"],
+      "next": "If this repeats for more than a day, ask your DNS provider to check that all nameservers serve the same records."
+    },
+    "DNS_PROBE_ERROR": {
+      "kind": "dns", "severity": "unknown",
+      "title": "Couldn't reach any DNS service",
+      "meaning": "Upfixy's checker couldn't reach the DNS services it uses. This is a problem on our side, not with your website.",
+      "causes": ["A network issue at Upfixy's monitoring location"],
+      "checks": ["Open your website yourself to see if it loads"],
+      "next": "Nothing for you to do. The next check usually succeeds; health stays Unknown until it does."
+    },
+    "DNS_PRIVATE_ADDRESS": {
+      "kind": "dns", "severity": "unknown",
+      "title": "Name points to a private address",
+      "meaning": "This name resolves to an internal or reserved network address. For safety Upfixy never connects to such addresses, so it can't check the website.",
+      "causes": ["A record points to an internal server address by mistake", "The name is only meant for an office or private network"],
+      "checks": ["Ask whoever manages DNS what address this name should point to"],
+      "next": "If the website should be public, point the record at the public server address. Upfixy will start checking it on the next cycle."
+    },
+    "DNS_NOT_APPLICABLE": {
+      "kind": "dns", "severity": "not_applicable",
+      "title": "No DNS check for an IP address",
+      "meaning": "This target is an IP address, not a domain name, so there is no DNS to check.",
+      "causes": ["The website was added by IP address"],
+      "checks": ["Consider adding the domain name visitors actually use"],
+      "next": "Add the domain name as a website to get DNS and certificate checks."
+    },
+    "HTTP_500": {
+      "kind": "http", "severity": "critical",
+      "title": "Website error (500)",
+      "meaning": "The server received the request but its website software crashed while building the page. Visitors see an error page.",
+      "causes": ["A recent code, plugin or theme update broke the site", "A database connection problem", "A configuration file error"],
+      "checks": ["Ask whether anyone updated the site, plugins or settings today", "Check if every page fails or only some"],
+      "next": "Your developer or hosting provider needs the server's error log to find the cause. Send the message below; Upfixy can't see the log without a hosting connection."
+    },
+    "HTTP_502": {
+      "kind": "http", "severity": "critical",
+      "title": "Bad gateway (502)",
+      "meaning": "A front server (such as a CDN or proxy) couldn't get a valid answer from the server that runs your website.",
+      "causes": ["The website application or PHP service stopped", "The origin server is overloaded", "A firewall blocks the CDN from reaching the server"],
+      "checks": ["Check whether your CDN or proxy (for example Cloudflare) shows an error page", "Ask your hosting provider whether the server is up"],
+      "next": "Contact your hosting provider. If you use a CDN, mention that the CDN reports it can't reach the origin."
+    },
+    "HTTP_503": {
+      "kind": "http", "severity": "critical",
+      "title": "Website temporarily unavailable (503)",
+      "meaning": "The server answered, but said it can't serve the page right now. Visitors see an error instead of your site.",
+      "causes": ["The hosting account hit a resource limit", "The site is in maintenance mode", "A recent update broke the application", "The server is overloaded"],
+      "checks": ["Open the site from another network or phone", "Ask whether anyone changed the site or plugins today"],
+      "next": "We observed the 503; we can't yet see why. Connect hosting to unlock deeper checks, or send the support message below."
+    },
+    "HTTP_504": {
+      "kind": "http", "severity": "critical",
+      "title": "Gateway timeout (504)",
+      "meaning": "A front server waited too long for your website's server to answer and gave up.",
+      "causes": ["Pages take too long to build (slow database or code)", "The origin server is overloaded or down"],
+      "checks": ["Check if the site is slow or failing for you too", "Ask whether traffic or a background task spiked"],
+      "next": "Ask your hosting provider or developer to check server load and slow requests at the time shown."
+    },
+    "HTTP_5XX": {
+      "kind": "http", "severity": "critical",
+      "title": "Server error",
+      "meaning": "The server answered with an error code in the 500 range, meaning something went wrong on the server.",
+      "causes": ["Website software error", "Server misconfiguration"],
+      "checks": ["Ask whether anything changed on the site recently"],
+      "next": "Send the support message below to your hosting provider or developer."
+    },
+    "HTTP_404": {
+      "kind": "http", "severity": "critical",
+      "title": "Page not found (404)",
+      "meaning": "The server is up, but says the monitored page doesn't exist.",
+      "causes": ["The page was moved or deleted", "The website was replaced and the old address no longer exists", "Hosting points to an empty folder"],
+      "checks": ["Open the exact monitored address in a browser", "Ask whether the site was rebuilt or moved recently"],
+      "next": "If the page moved, update the monitored address or add a redirect. If the whole site is missing, contact your hosting provider."
+    },
+    "HTTP_410": {
+      "kind": "http", "severity": "critical",
+      "title": "Page removed (410)",
+      "meaning": "The server says this page was removed on purpose and won't come back.",
+      "causes": ["The page was intentionally deleted", "A site rebuild removed old addresses"],
+      "checks": ["Confirm whether the page should still exist"],
+      "next": "Update the monitored address to a page that should stay up, such as your home page."
+    },
+    "HTTP_401": {
+      "kind": "http", "severity": "warning",
+      "title": "Login required (401)",
+      "meaning": "The page asks for a username and password before showing anything. Visitors without a login can't see it.",
+      "causes": ["The site is password-protected (for example a staging site)", "A security setting was turned on by mistake"],
+      "checks": ["Open the site in a private browser window"],
+      "next": "If the site should be public, ask your developer or host to remove the password protection."
+    },
+    "HTTP_403": {
+      "kind": "http", "severity": "warning",
+      "title": "Access forbidden (403)",
+      "meaning": "The server refused to show the page. Sometimes this hits all visitors; sometimes only automated checkers like ours are blocked.",
+      "causes": ["A firewall or security plugin blocks visitors or our checker", "Wrong file permissions on the server", "The site is blocked for some countries"],
+      "checks": ["Open the site yourself on mobile data", "Ask whether a security plugin or firewall rule was added recently"],
+      "next": "If the site works for you, the firewall may be blocking our checker. Otherwise ask your hosting provider to check permissions and firewall rules."
+    },
+    "HTTP_429": {
+      "kind": "http", "severity": "unknown",
+      "title": "Checker was rate-limited (429)",
+      "meaning": "The server asked our checker to slow down. That says nothing about whether visitors can see the site, so health shows Unknown.",
+      "causes": ["A firewall or CDN limits automated requests"],
+      "checks": ["Open the site yourself"],
+      "next": "Optionally allow Upfixy's checker in your firewall. Health stays Unknown while it is rate-limited."
+    },
+    "HTTP_4XX": {
+      "kind": "http", "severity": "warning",
+      "title": "Request rejected",
+      "meaning": "The server rejected the request with an error in the 400 range.",
+      "causes": ["The monitored address is wrong", "A security rule rejects the request"],
+      "checks": ["Open the monitored address in a browser"],
+      "next": "Check the monitored address. If it is right, send the support message below to your developer."
+    },
+    "HTTP_TIMEOUT": {
+      "kind": "http", "severity": "critical",
+      "title": "Website not responding",
+      "meaning": "Our check waited and the website never answered in time. To visitors the page keeps loading and then fails.",
+      "causes": ["The server is down or overloaded", "A firewall silently drops traffic", "DNS points to the wrong server"],
+      "checks": ["Open the site from your phone on mobile data", "Ask your hosting provider whether the server is up"],
+      "next": "Contact your hosting provider with the message below. If DNS is also failing, fix DNS first."
+    },
+    "HTTP_CONNECTION_REFUSED": {
+      "kind": "http", "severity": "critical",
+      "title": "Server refused the connection",
+      "meaning": "The server's address was reached, but nothing accepted the connection. The web server software may be stopped.",
+      "causes": ["The web server service stopped", "DNS points to a server that no longer hosts the site", "A firewall rejects connections"],
+      "checks": ["Ask whether the site was moved to a new host", "Ask your host whether the web server is running"],
+      "next": "Send the message below to your hosting provider."
+    },
+    "HTTP_CONNECTION_RESET": {
+      "kind": "http", "severity": "critical",
+      "title": "Connection dropped",
+      "meaning": "The server started answering but cut the connection before the page arrived.",
+      "causes": ["The server crashed mid-request", "A firewall or security system ended the connection", "Network problems near the server"],
+      "checks": ["Reload the site a few times", "Ask your host whether there were network problems"],
+      "next": "If it repeats, send the message below to your hosting provider."
+    },
+    "HTTP_EMPTY_RESPONSE": {
+      "kind": "http", "severity": "critical",
+      "title": "Server sent an empty reply",
+      "meaning": "The server accepted the connection and then closed it without sending anything.",
+      "causes": ["The website software crashed", "A misconfigured proxy or firewall"],
+      "checks": ["Open the site in a browser and note any error"],
+      "next": "Send the message below to your hosting provider or developer."
+    },
+    "HTTP_TLS_ERROR": {
+      "kind": "http", "severity": "critical",
+      "title": "Secure connection failed",
+      "meaning": "Browsers couldn't set up a secure (https) connection, so they show a security error instead of the site.",
+      "causes": ["Certificate expired, invalid or for the wrong name", "The server's https setup is broken"],
+      "checks": ["Open the site and look for a security warning", "See the SSL tab for certificate details"],
+      "next": "See the SSL check on this website for the exact certificate problem."
+    },
+    "HTTP_REQUEST_FAILED": {
+      "kind": "http", "severity": "critical",
+      "title": "Request failed",
+      "meaning": "Our check couldn't complete a request to the website for a reason other than a timeout or refusal.",
+      "causes": ["Network problems between our checker and the server", "An unusual server response"],
+      "checks": ["Open the site yourself"],
+      "next": "If the next checks fail too, send the message below to your hosting provider."
+    },
+    "HTTP_TOO_MANY_REDIRECTS": {
+      "kind": "http", "severity": "warning",
+      "title": "Redirect loop",
+      "meaning": "The site sends visitors from one address to another more than ten times. Browsers give up with a 'too many redirects' error.",
+      "causes": ["http↔https or www↔non-www rules fighting each other", "A CDN and the server both forcing https differently"],
+      "checks": ["Open the site in a private window and see if the browser reports too many redirects", "Ask whether redirect or SSL settings were changed recently"],
+      "next": "Ask your developer or host to review redirect rules; the redirect chain below shows the loop."
+    },
+    "HTTP_REDIRECT_INVALID": {
+      "kind": "http", "severity": "warning",
+      "title": "Broken redirect",
+      "meaning": "The site redirects visitors, but the destination is missing or not a valid web address.",
+      "causes": ["A redirect rule with a typo", "A redirect to a non-web address"],
+      "checks": ["Open the site and see where it sends you"],
+      "next": "Ask your developer to fix the redirect rule shown in the chain below."
+    },
+    "HTTP_REDIRECT_BLOCKED": {
+      "kind": "http", "severity": "warning",
+      "title": "Redirect to a non-public address",
+      "meaning": "The site redirects to an internal address or an unusual port. Upfixy never follows those, and most visitors couldn't reach them either.",
+      "causes": ["A redirect rule points to an internal server", "A staging or admin address leaked into a redirect"],
+      "checks": ["Open the site and see where it sends you"],
+      "next": "Ask your developer to change the redirect to the public address."
+    },
+    "HTTP_REDIRECT_UNRESOLVABLE": {
+      "kind": "http", "severity": "critical",
+      "title": "Redirect to a name that doesn't resolve",
+      "meaning": "The site redirects visitors to an address whose domain name has no working DNS. Visitors end up on an error.",
+      "causes": ["A redirect to a domain that expired", "A typo in a redirect rule"],
+      "checks": ["Open the site and see where it sends you"],
+      "next": "Fix the redirect target, or the DNS of the domain it points to."
+    },
+    "HTTP_HTTPS_DOWNGRADE": {
+      "kind": "http", "severity": "warning",
+      "title": "Secure page redirects to insecure",
+      "meaning": "The https address sends visitors to an insecure http address. Browsers may warn, and data is no longer protected.",
+      "causes": ["An old redirect rule from before https was set up", "A CMS 'site address' setting still uses http"],
+      "checks": ["Open the https address and look at the address bar after it loads"],
+      "next": "Ask your developer to update the site address and redirects to https."
+    },
+    "HTTP_SLOW": {
+      "kind": "http", "severity": "warning",
+      "title": "Website is very slow",
+      "meaning": "The page took more than 10 seconds to arrive. Many visitors leave long before that.",
+      "causes": ["Server overload or too little hosting capacity", "Slow database queries or plugins", "Large uncached pages"],
+      "checks": ["Open the site at different times of day", "Ask whether traffic grew or a plugin was added"],
+      "next": "Ask your developer or host to look at caching and server load at the times shown."
+    },
+    "HTTP_NOT_CHECKED": {
+      "kind": "http", "severity": "unknown",
+      "title": "Website check skipped",
+      "meaning": "The website itself wasn't checked this time because there was no safe address to connect to (see the DNS check).",
+      "causes": ["DNS is failing, disagreeing, or points to a private address"],
+      "checks": ["Look at the Domain check for this website"],
+      "next": "Fix the DNS issue first; the website check runs again automatically."
+    },
+    "TLS_EXPIRED": {
+      "kind": "tls", "severity": "critical",
+      "title": "SSL certificate has expired",
+      "meaning": "Browsers now show a full-page security warning, and most visitors will leave before reaching your site.",
+      "causes": ["Automatic renewal (for example AutoSSL or Let's Encrypt) failed", "A manually bought certificate was not renewed"],
+      "checks": ["Open the site and look for a 'Not secure' or 'Your connection is not private' warning"],
+      "next": "Renew the certificate today. Your hosting provider can usually do this in minutes."
+    },
+    "TLS_EXPIRING_CRITICAL": {
+      "kind": "tls", "severity": "critical",
+      "title": "SSL certificate expires within 3 days",
+      "meaning": "The certificate runs out in under three days. If it isn't renewed, browsers will block visitors with a security warning.",
+      "causes": ["Automatic renewal is failing", "A manual certificate was forgotten"],
+      "checks": ["Click the padlock in your browser to see the expiry date", "Ask whether renewal is automatic on your plan"],
+      "next": "Ask your hosting provider to renew it now."
+    },
+    "TLS_EXPIRING": {
+      "kind": "tls", "severity": "warning",
+      "title": "SSL certificate expiring soon",
+      "meaning": "The certificate that keeps visitors' connection to your site private runs out within two weeks. After that, browsers show a full-page security warning.",
+      "causes": ["Automatic renewal (for example AutoSSL) is failing", "The domain points somewhere renewal can't verify", "A certificate was bought manually and not renewed"],
+      "checks": ["Open the site in a browser and click the padlock to see the expiry date", "Ask whether renewal is automatic on your hosting plan"],
+      "next": "Ask your hosting provider to renew the certificate, or connect hosting so Upfixy can check AutoSSL status."
+    },
+    "TLS_HOSTNAME_MISMATCH": {
+      "kind": "tls", "severity": "critical",
+      "title": "SSL certificate is for a different name",
+      "meaning": "The certificate doesn't cover this exact address (for example it covers example.com but not www.example.com). Browsers show a security warning.",
+      "causes": ["The certificate was issued without the www (or non-www) name", "DNS points this name to a server set up for a different site"],
+      "checks": ["Compare the names listed in the certificate below with the address visitors use"],
+      "next": "Ask your host to issue a certificate that includes this exact name."
+    },
+    "TLS_SELF_SIGNED": {
+      "kind": "tls", "severity": "critical",
+      "title": "Self-signed SSL certificate",
+      "meaning": "The certificate wasn't issued by a trusted authority, so browsers treat the site as unsafe and show a warning.",
+      "causes": ["The server is still using a default or temporary certificate", "Certificate installation failed"],
+      "checks": ["Open the site and look for a security warning"],
+      "next": "Ask your host to install a free trusted certificate (for example AutoSSL or Let's Encrypt)."
+    },
+    "TLS_UNTRUSTED_CHAIN": {
+      "kind": "tls", "severity": "critical",
+      "title": "SSL certificate isn't trusted",
+      "meaning": "Browsers can't confirm who issued the certificate, often because a middle ('intermediate') certificate is missing. Some visitors see warnings.",
+      "causes": ["The intermediate certificate wasn't installed", "The certificate came from an untrusted issuer"],
+      "checks": ["Open the site on a phone and on a computer; some devices may warn and others not"],
+      "next": "Ask your host to install the full certificate chain."
+    },
+    "TLS_NOT_YET_VALID": {
+      "kind": "tls", "severity": "critical",
+      "title": "SSL certificate not valid yet",
+      "meaning": "The certificate's start date is in the future, so browsers reject it.",
+      "causes": ["A newly issued certificate with a wrong start date", "The server's clock is wrong"],
+      "checks": ["Look at the 'valid from' date below"],
+      "next": "Ask your host to check the server clock and reinstall the certificate."
+    },
+    "TLS_HANDSHAKE_FAILED": {
+      "kind": "tls", "severity": "critical",
+      "title": "Secure connection could not be set up",
+      "meaning": "The server accepted the connection but the secure (https) setup failed, so browsers show an error.",
+      "causes": ["No certificate installed for this name", "Outdated security settings on the server"],
+      "checks": ["Open the https address in a browser and note the error"],
+      "next": "Send the message below to your hosting provider."
+    },
+    "TLS_TIMEOUT": {
+      "kind": "tls", "severity": "critical",
+      "title": "Secure connection timed out",
+      "meaning": "The server didn't complete the secure connection in time.",
+      "causes": ["The server is overloaded or down", "A firewall drops https traffic"],
+      "checks": ["Open the site yourself"],
+      "next": "If the website check also fails, contact your hosting provider."
+    },
+    "TLS_CONNECTION_REFUSED": {
+      "kind": "tls", "severity": "critical",
+      "title": "Secure port refused the connection",
+      "meaning": "Nothing accepted connections on the https port, so the secure site isn't available.",
+      "causes": ["https isn't set up on this server", "The web server stopped", "DNS points to the wrong server"],
+      "checks": ["Try the http:// address", "Ask whether the site moved hosts recently"],
+      "next": "Ask your hosting provider to enable https for this name."
+    },
+    "TLS_NOT_CHECKED": {
+      "kind": "tls", "severity": "unknown",
+      "title": "SSL check skipped",
+      "meaning": "The certificate wasn't checked this time because there was no safe address to connect to (see the DNS check).",
+      "causes": ["DNS is failing, disagreeing, or points to a private address"],
+      "checks": ["Look at the Domain check for this website"],
+      "next": "Fix the DNS issue first; the SSL check runs again automatically."
+    },
+    "PROBE_UNAVAILABLE": {
+      "kind": "probe", "severity": "unknown",
+      "title": "Our checker had a problem",
+      "meaning": "Upfixy's monitoring location couldn't run checks properly at this time. This says nothing about your website, so health shows Unknown.",
+      "causes": ["A network problem at Upfixy's monitoring location"],
+      "checks": ["Open your website yourself if you're worried"],
+      "next": "Nothing for you to do. Checks resume automatically."
+    },
+    "MONITOR_STALE": {
+      "kind": "probe", "severity": "unknown",
+      "title": "No recent readings",
+      "meaning": "Upfixy hasn't received a fresh result for this site recently, so its health is unknown. This doesn't mean the site is down.",
+      "causes": ["A monitoring check was delayed", "The site is blocking our checks"],
+      "checks": ["Open the site yourself to see if it loads"],
+      "next": "Use Check now to queue a new check."
+    },
+    "MONITOR_REJECTED": {
+      "kind": "probe", "severity": "unknown",
+      "title": "Address can't be monitored",
+      "meaning": "This address resolves to an internal or reserved network, so Upfixy won't check it.",
+      "causes": ["The address is for a private network", "A DNS record points to an internal address"],
+      "checks": ["Confirm the public address of the website"],
+      "next": "Add the website's public address instead."
+    }
+  }
+}

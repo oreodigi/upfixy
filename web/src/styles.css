@@ -393,3 +393,18 @@ tr.muted th, tr.muted td { color: var(--ink-2); }
 /* Narrow cards: the status pill drops below a long hostname instead of splitting it. */
 .card__head { flex-wrap: wrap; }
 .card__head .host, .card__head h3 { min-width: 0; flex: 1 1 12ch; }
+
+/* ------------------------------------------------------------ M3 */
+.panel-box--alert { border-left: 5px solid var(--critical); }
+.row--unread .row__main a { font-weight: 800; }
+.badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; padding: 0 5px;
+  border-radius: 9px; background: var(--critical); color: #fff; font-size: 11px; font-weight: 800; }
+.evidence summary { cursor: pointer; color: var(--link); text-decoration: underline; font-family: ui-monospace, monospace; font-size: 13px; }
+.facts { display: grid; gap: 4px; margin: 8px 0 0; font-size: 13px; min-width: 240px; }
+.facts div { display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 8px; }
+.facts dt { color: var(--ink-2); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.choice input[type='checkbox'] { width: 20px; height: 20px; }
+.list input[type='checkbox'] { width: 22px; height: 22px; }
+/* Tables scroll inside their own region; cells keep words whole. */
+.table-wrap .list td.host, .table-wrap .list td.num { white-space: nowrap; overflow-wrap: normal; }

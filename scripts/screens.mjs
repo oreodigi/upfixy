@@ -40,6 +40,8 @@ const SCREENS = [
   ['agency-websites-list', 'owner', 'Demo Agency', [{ goto: '/websites?lane=critical' }, { click: 'List' }]],
   ['agency-website-detail', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }]],
   ['agency-website-ssl', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'SSL' }]],
+  ['agency-website-activity', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'Activity' }, { click: 'Check now' }]],
+  ['agency-alerts', 'owner', 'Demo Agency', [{ goto: '/alerts' }]],
   ['agency-work', 'owner', 'Demo Agency', [{ goto: '/work' }]],
   ['agency-ticket', 'owner', 'Demo Agency', [{ goto: '/work' }, { text: 'Renew SSL certificate', nth: 0 }]],
   ['agency-team', 'owner', 'Demo Agency', [{ goto: '/team' }]],

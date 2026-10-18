@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BoardController;
 use App\Http\Controllers\Api\ClaimController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\Api\InvitationController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\QuoteController;
@@ -72,6 +74,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::post('websites', [WebsiteController::class, 'store'])->middleware('throttle:60,1');
         Route::get('websites/{website}', [WebsiteController::class, 'show'])->whereUuid('website');
         Route::get('websites/{website}/history', [WebsiteController::class, 'history'])->whereUuid('website');
+        Route::post('websites/{website}/recheck', [WebsiteController::class, 'recheck'])->whereUuid('website')->middleware('throttle:30,1');
 
         Route::get('websites/{website}/claims', [ClaimController::class, 'index'])->whereUuid('website');
         Route::post('websites/{website}/claims', [ClaimController::class, 'store'])->whereUuid('website')->middleware('throttle:20,1');
@@ -81,6 +84,15 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::get('boards/websites', [BoardController::class, 'websites']);
         Route::get('boards/clients', [BoardController::class, 'clients']);
         Route::get('overview', [BoardController::class, 'overview']);
+
+        Route::get('incidents', [IncidentController::class, 'index']);
+        Route::get('incidents/{incident}', [IncidentController::class, 'show'])->whereUuid('incident');
+        Route::post('incidents/{incident}/acknowledge', [IncidentController::class, 'acknowledge'])->whereUuid('incident');
+        Route::get('notifications', [NotificationController::class, 'index']);
+        Route::post('notifications/read-all', [NotificationController::class, 'readAll']);
+        Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])->whereUuid('notification');
+        Route::get('notification-preferences', [NotificationController::class, 'prefs']);
+        Route::put('notification-preferences', [NotificationController::class, 'updatePrefs']);
 
         Route::get('views', [SavedViewController::class, 'index']);
         Route::post('views', [SavedViewController::class, 'store'])->middleware('throttle:30,1');

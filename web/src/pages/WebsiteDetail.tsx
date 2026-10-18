@@ -1,7 +1,8 @@
 // SCR-07 Website detail: one tab per area, every value with its source and age.
 import { useEffect, useState } from 'react';
 import { TICKET_LABELS } from '@upfixy/core';
-import { api, ApiError, type ApiCheck, type ApiHistoryRow, type ApiWebsiteDetail } from '../api';
+import { api, ApiError, type ApiCheck, type ApiHistoryRow, type ApiIncident, type ApiWebsiteDetail } from '../api';
+import { IncidentRows } from './Incidents';
 import { useWs } from '../app-context';
 import { StatusList, StatusPill, ago, since } from '../components';
 import { HELP } from '../help';
@@ -46,6 +47,29 @@ function Readings({ checks }: { checks: ApiCheck[] }) {
   );
 }
 
+/** Key facts from a reading's stored evidence, in plain terms (advanced view: staff and solo owners). */
+function EvidenceFacts({ r }: { r: ApiHistoryRow }) {
+  const d = (r.detail ?? {}) as Record<string, any>;
+  const facts: Array<[string, string]> = [['Evidence ID', r.id], ['Cycle', String(r.cycle_no)], ['Checked from', r.region ?? 'n/a']];
+  if (r.kind === 'http') {
+    for (const [i, h] of (d.chain ?? []).entries()) {
+      facts.push([i === 0 ? 'Request' : `Redirect ${i}`, `${h.url} → ${h.status ?? h.error ?? h.blocked}${h.ms ? ` in ${h.ms} ms` : ''}`]);
+    }
+    if (d.ms_ttfb !== undefined) facts.push(['Time to first byte', `${d.ms_ttfb} ms`]);
+  }
+  if (r.kind === 'tls' && d.not_after) {
+    facts.push(['Issued to', `${d.subject_cn ?? '?'}${d.sans?.length ? ` (${d.sans.join(', ')})` : ''}`], ['Issued by', d.issuer_cn ?? '?'],
+      ['Valid until', `${new Date(d.not_after).toLocaleDateString('en-IN', { dateStyle: 'medium' })} (${d.days_left} days)`], ['Fingerprint', String(d.sha256 ?? '').slice(0, 23) + '…']);
+  }
+  if (r.kind === 'dns') {
+    for (const [ip, x] of Object.entries<any>(d.resolvers ?? {})) facts.push([`Resolver ${ip}`, x.status === 'answered' ? `${x.rcode}, ${x.addresses} address(es)` : x.status]);
+    if (d.dnssec) facts.push(['DNSSEC', d.dnssec === 'validated' ? 'Validated by resolvers' : 'Not validated (unsigned or not checked)']);
+    if (d.disagreement) facts.push(['Note', 'Resolvers disagreed; this is not treated as a cause.']);
+  }
+  if (d.attempts > 1) facts.push(['Attempts this cycle', String(d.attempts)]);
+  return <dl className="facts">{facts.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>;
+}
+
 function History({ id, kind }: { id: string; kind?: ApiCheck['kind'] }) {
   const [rows, setRows] = useState<ApiHistoryRow[] | null>(null);
   useEffect(() => {
@@ -55,19 +79,26 @@ function History({ id, kind }: { id: string; kind?: ApiCheck['kind'] }) {
   }, [id, kind]);
   if (!rows) return <p className="hint" role="status">Loading history…</p>;
   if (!rows.length) return <p className="empty-inline">No history yet.</p>;
+  return <HistoryTable rows={rows} kind={kind} />;
+}
+
+function HistoryTable({ rows, kind }: { rows: ApiHistoryRow[]; kind?: ApiCheck['kind'] }) {
+  const { role } = useWs();
+  const advanced = ['owner', 'admin', 'technician'].includes(role); // §6 "View raw logs / advanced details"
   return (
     <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
       <table className="list">
         <caption className="sr-only">Reading history, newest first</caption>
-        <thead><tr><th scope="col">When</th><th scope="col">Address</th>{!kind && <th scope="col">Check</th>}<th scope="col">Result</th><th scope="col">Source</th></tr></thead>
+        <thead><tr><th scope="col">When</th><th scope="col">Address</th>{!kind && <th scope="col">Check</th>}<th scope="col">Result</th><th scope="col">Source</th>{advanced && <th scope="col">Evidence</th>}</tr></thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
+          {rows.map((r) => (
+            <tr key={r.id}>
               <td className="num">{new Date(r.observed_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
               <td className="host">{r.host}</td>
               {!kind && <td>{KIND_LABEL[r.kind]}</td>}
               <td className={`txt--${r.severity === 'ok' ? 'ok' : r.severity}`}>{SEV_LABEL[r.severity]}{r.severity !== 'ok' ? ` (${r.result_code})` : ''}</td>
               <td>{SOURCE[r.source]}</td>
+              {advanced && <td><details className="evidence"><summary>{r.id.slice(0, 8)}</summary><EvidenceFacts r={r} /></details></td>}
             </tr>
           ))}
         </tbody>
@@ -80,13 +111,31 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
   const { openHelp, openVerify, report, canVerify, role, sites } = useWs();
   const [d, setD] = useState<ApiWebsiteDetail | null>(null);
   const [missing, setMissing] = useState(false);
+  const [incidents, setIncidents] = useState<ApiIncident[]>([]);
+  const [recheck, setRecheck] = useState<string | null>(null);
+  const [polls, setPolls] = useState(0);
   const tab: Tab = (TABS.find(([t]) => t === rawTab)?.[0]) ?? 'overview';
 
+  const load = () => api<ApiWebsiteDetail>('GET', `websites/${id}`).then(setD)
+    .catch((e) => { if (e instanceof ApiError && e.status === 404) setMissing(true); });
+  const loadIncidents = () => api<{ data: ApiIncident[] }>('GET', `incidents?status=all&website_id=${id}`)
+    .then((r) => setIncidents(r.data.slice(0, 5))).catch(() => undefined);
+  useEffect(() => { setMissing(false); setRecheck(null); void load(); void loadIncidents(); }, [id, sites]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // After "Check now", refresh every 10 s for up to 2 minutes so the new result appears (KB-003).
   useEffect(() => {
-    setMissing(false);
-    api<ApiWebsiteDetail>('GET', `websites/${id}`).then(setD)
-      .catch((e) => { if (e instanceof ApiError && e.status === 404) setMissing(true); });
-  }, [id, sites]);
+    if (polls <= 0) return;
+    const t = window.setTimeout(() => { void load(); setPolls(polls - 1); }, 10_000);
+    return () => window.clearTimeout(t);
+  }, [polls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function checkNow() {
+    try {
+      const r = await api<{ queued: number; message: string }>('POST', `websites/${id}/recheck`);
+      setRecheck(r.message);
+      if (r.queued > 0) setPolls(12);
+    } catch (e) { setRecheck(e instanceof Error ? e.message : String(e)); }
+  }
 
   if (missing) return <div className="page"><h1>Website not found</h1><p>It may have been removed, or you no longer have access. <a href="/websites" onClick={onLinkClick}>Back to websites</a></p></div>;
   if (!d) return <p className="hint" role="status">Loading…</p>;
@@ -107,8 +156,10 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
         <div>
           <h1 className="host">{d.display_name}</h1>
           <p className="headline__sub"><StatusPill lane={d.lane} /> {ago(site.lastVerifiedAt, site.lastObservedAt)}</p>
+          <p className="hint" role="status">{recheck ?? 'Showing stored results. Use “Check now” to queue a live check.'}</p>
         </div>
         <div className="actions">
+          {role !== 'billing' && <button type="button" className="btn btn--quiet" onClick={() => void checkNow()}>Check now</button>}
           {canVerify && !verified && <button type="button" className="btn btn--quiet" onClick={() => openVerify({ id: d.id, name: d.display_name })}>Verify ownership</button>}
           {role !== 'billing' && <button type="button" className="btn" onClick={() => report(d.id, d.display_name)}>Report a problem</button>}
         </div>
@@ -125,6 +176,12 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
         {tab === 'overview' && (
           <div className="split">
             <div>
+              {incidents.length > 0 && (
+                <>
+                  <h2>Incidents</h2>
+                  <IncidentRows incidents={incidents} showSite={false} onChanged={() => void loadIncidents()} />
+                </>
+              )}
               <h2>Status by area</h2>
               <StatusList components={site.components} />
               {site.issues.length > 0 && (

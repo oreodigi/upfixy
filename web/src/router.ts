@@ -10,6 +10,7 @@ export type Route =
   | { name: 'work'; ticket?: string }
   | { name: 'team' }
   | { name: 'settings' }
+  | { name: 'alerts' }
   | { name: 'not_found' };
 
 const UUID = '[0-9a-f-]{36}';
@@ -25,6 +26,7 @@ export function parse(path: string, search = ''): Route {
   if ((m = p.match(new RegExp(`^/websites/(${UUID})(?:/([a-z]+))?$`)))) return { name: 'website', id: m[1], tab: m[2] };
   if (p === '/work') return { name: 'work', ticket: q.get('ticket') ?? undefined };
   if (p === '/team') return { name: 'team' };
+  if (p === '/alerts') return { name: 'alerts' };
   if (p === '/settings' || p === '/security') return { name: 'settings' };
   return { name: 'not_found' };
 }

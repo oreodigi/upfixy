@@ -144,10 +144,29 @@ export interface ApiWebsiteDetail {
   coverage: Record<string, string> | null; verified_hosts: string[];
   requests: Array<{ id: string; title: string; state: TicketState; updated_at: string }>;
 }
-export interface ApiHistoryRow { observed_at: string; host: string; kind: ApiCheck['kind']; severity: ApiCheck['severity']; source: ApiCheck['source']; result_code: string }
+export interface ApiHistoryRow {
+  id: string; observed_at: string; host: string; kind: ApiCheck['kind']; severity: ApiCheck['severity']; source: ApiCheck['source'];
+  result_code: string; region: string | null; cycle_no: number; detail: Record<string, unknown> | null;
+}
 export interface ApiClientDetail extends ApiClient {
   agency_may_pay: boolean; client_self_service: boolean;
   client_users: Array<{ user_id: string; email: string | null; role: string }>;
 }
 export interface ApiSavedView { id: string; board: 'clients' | 'websites' | 'work'; name: string; filters: import('./filters').Filters }
 export interface ApiStaff { user_id: string; email: string; role: string }
+
+// ----------------------------------------------------------------- M3 types
+export interface ApiIncident {
+  id: string; website_id: string; website: string; host: string; status: 'open' | 'resolved'; root_kind: ApiCheck['kind'];
+  result_code: string; title: string; opened_at: string; first_failure_at: string; last_failure_at: string;
+  resolved_at: string | null; acknowledged_at: string | null; client_id: string | null;
+  events?: Array<{ kind: string; result_code: string | null; at: string }>;
+}
+export interface ApiNotification {
+  id: string; kind: 'incident_opened' | 'incident_resolved'; created_at: string; read_at: string | null;
+  incident_id: string; result_code: string; status: 'open' | 'resolved'; website_id: string; website: string; title: string;
+}
+export interface ApiPrefs {
+  workspace: { email: boolean; in_app: boolean };
+  clients: Array<{ client_id: string; email: boolean; in_app: boolean }>;
+}

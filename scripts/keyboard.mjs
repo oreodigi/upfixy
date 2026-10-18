@@ -57,6 +57,28 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   // 8. Deep link renders directly.
   await p.goto(B+'/websites?lane=critical',{waitUntil:'networkidle'});
   ok(`${tag}: deep link ?lane=critical pre-selects chip`, (await p.getByRole('button',{name:/^Critical/}).first().getAttribute('aria-pressed'))==='true');
+  // 9. M3: open evidence details and queue a live check from the keyboard.
+  await p.goto(B+'/websites',{waitUntil:'networkidle'});
+  await p.getByRole('link',{name:/mitratraders/}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
+  await p.getByRole('tab',{name:'Activity',exact:true}).focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
+  const sum = p.locator('details.evidence summary').first(); await sum.focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
+  ok(`${tag}: Enter opens evidence details`, await p.locator('details.evidence[open] .facts').first().isVisible());
+  await p.getByRole('button',{name:'Check now'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(500);
+  ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.headline [role=status]').innerText()));
+  await c.close();
+}
+// 10. Acknowledge an incident with the keyboard (once; it changes data).
+{
+  const c = await b.newContext({viewport:{width:1440,height:900}});
+  await c.addInitScript(([t,w])=>{localStorage.setItem('upfixy.token',t);localStorage.setItem('upfixy.workspace',w)},[j.token,ws.id]);
+  const p = await c.newPage(); await p.goto(B+'/',{waitUntil:'networkidle'});
+  const before = await p.getByRole('button',{name:'Acknowledge'}).count();
+  if (before === 0) {
+    results.push('SKIP  desktop: Enter acknowledges an incident (no unacknowledged incident; run seed-dev first)');
+  } else {
+    await p.getByRole('button',{name:'Acknowledge'}).first().focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(600);
+    ok('desktop: Enter acknowledges an incident', (await p.getByRole('button',{name:'Acknowledge'}).count()) === before - 1);
+  }
   await c.close();
 }
 await b.close();

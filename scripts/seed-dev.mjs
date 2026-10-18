@@ -42,20 +42,46 @@ async function workspace(name, kind) {
   return ws;
 }
 
+/** Plausible redacted evidence for a demo reading, shaped like the probe worker's. */
+function evidence(kind, host, code) {
+  if (kind === 'http') {
+    const status = code === 'HTTP_OK' ? 200 : Number(code.replace('HTTP_', '')) || null;
+    return status ? { chain: [{ url: `https://${host}/`, ip: '203.0.113.10', status, ms: 340 }], status, ms_total: 340, ms_ttfb: 280, ms_connect: 40, bytes: 48213, content_type: 'text/html; charset=UTF-8', attempts: 1, outcome: status >= 500 ? 'target_failure' : 'ok' }
+      : { chain: [{ url: `https://${host}/`, ip: '203.0.113.10', error: code }], attempts: 3, outcome: 'target_failure' };
+  }
+  if (kind === 'tls') {
+    const days = code === 'TLS_EXPIRING' ? 9 : 64;
+    return { ip: '203.0.113.10', subject_cn: host, issuer_cn: 'R11', sans: [host, `www.${host.replace(/^www\./, '')}`], not_before: new Date(Date.now() - 26 * 864e5).toISOString(),
+      not_after: new Date(Date.now() + days * 864e5).toISOString(), days_left: days, sha256: 'AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89', chain_length: 2, protocol: 'TLSv1.3', verified: true, attempts: 1 };
+  }
+  const answered = code === 'DNS_OK';
+  const r = (rcode) => ({ status: 'answered', rcode, ad: false, ms: 18, addresses: answered ? 1 : 0, cname: [] });
+  return { resolvers: { '1.1.1.1': r(answered ? 'NOERROR' : 'SERVFAIL'), '8.8.8.8': r(answered ? 'NOERROR' : 'SERVFAIL'), '9.9.9.9': r(answered ? 'NOERROR' : 'SERVFAIL') },
+    dnssec: 'not_validated', ...(answered ? { addresses: ['203.0.113.10'] } : {}), attempts: 1 };
+}
+
 /** severity per check, minutes ago (null = never checked) */
 async function site(ws, client, host, readings, { active = true } = {}) {
   const w = (await one('INSERT INTO websites(workspace_id, client_id, display_name) VALUES ($1, $2, $3) RETURNING id', [ws, client, host])).id;
-  const t = (await one(`INSERT INTO monitor_targets(workspace_id, website_id, scheme, host, port, state)
-                        VALUES ($1, $2, 'https', $3, 443, $4) RETURNING id`, [ws, w, host, active ? 'active' : 'pending_validation'])).id;
-  for (const [kind, sev, mins, code] of readings) {
-    if (mins === null) continue;
-    await db.query(`INSERT INTO observations(workspace_id, monitor_target_id, check_kind, cycle_no, severity, result_code, observed_at, detail)
-                    VALUES ($1, $2, $3, 1, $4, $5, now() - make_interval(mins => $6), $7)`,
-      [ws, t, kind, sev, code, mins, JSON.stringify({})]);
+  // Seeded readings are cycle 1; the probe worker continues from cycle 2 in 5 minutes.
+  const t = (await one(`INSERT INTO monitor_targets(workspace_id, website_id, scheme, host, port, state, last_cycle_no, next_check_at)
+                        VALUES ($1, $2, 'https', $3, 443, $4, 1, now() + interval '5 minutes') RETURNING id`, [ws, w, host, active ? 'active' : 'pending_validation'])).id;
+  const seen = readings.filter(([, , mins]) => mins !== null);
+  if (seen.length) {
+    const mins = Math.max(...seen.map(([, , m]) => m));
+    const failed = seen.some(([, sev]) => sev === 'critical');
+    const run = (await one(`INSERT INTO check_runs(workspace_id, monitor_target_id, cycle_no, scheduled_at, started_at, finished_at, worker, worker_version, region, outcome, attempts)
+                            VALUES ($1, $2, 1, now() - make_interval(mins => $3), now() - make_interval(mins => $3), now() - make_interval(mins => $3),
+                                    'seed', 'seed', 'dev-local', $4, 1) RETURNING id`, [ws, t, mins, failed ? 'target_failure' : 'ok'])).id;
+    for (const [kind, sev, m, code] of seen) {
+      await db.query(`INSERT INTO observations(workspace_id, monitor_target_id, check_kind, cycle_no, severity, result_code, observed_at, detail, check_run_id, region)
+                      VALUES ($1, $2, $3, 1, $4, $5, now() - make_interval(mins => $6), $7, $8, 'dev-local')`,
+        [ws, t, kind, sev, code, m, JSON.stringify(evidence(kind, host, code)), run]);
+    }
   }
   return { w, t };
 }
-const ok = (mins = 2) => [['http', 'ok', mins, 'HTTP_200'], ['tls', 'ok', mins, 'TLS_VALID'], ['dns', 'ok', mins, 'DNS_OK']];
+const ok = (mins = 2) => [['http', 'ok', mins, 'HTTP_OK'], ['tls', 'ok', mins, 'TLS_OK'], ['dns', 'ok', mins, 'DNS_OK']];
 
 // ------------------------------------------------------------ demo agency
 const agency = await workspace('Demo Agency', 'agency');
@@ -72,15 +98,15 @@ for (const c of [mitra, kalaghar, skyline]) {
 }
 await db.query('INSERT INTO client_assignments(workspace_id, client_id, user_id) VALUES ($1, $2, $3)', [agency, mitra, clientUser]);
 
-const shop = await site(agency, mitra, 'shop.mitratraders.in', [['http', 'ok', 2, 'HTTP_200'], ['tls', 'warning', 2, 'TLS_EXPIRING'], ['dns', 'ok', 2, 'DNS_OK']]);
+const shop = await site(agency, mitra, 'shop.mitratraders.in', [['http', 'ok', 2, 'HTTP_OK'], ['tls', 'warning', 2, 'TLS_EXPIRING'], ['dns', 'ok', 2, 'DNS_OK']]);
 await site(agency, mitra, 'mitratraders.in', ok(3));
 await site(agency, mitra, 'www.mitratraders.in', ok(3));
-const kj = await site(agency, kalaghar, 'kalaghar-jewels.com', [['http', 'critical', 4, 'HTTP_503'], ['tls', 'ok', 4, 'TLS_VALID'], ['dns', 'ok', 4, 'DNS_OK']]);
+const kj = await site(agency, kalaghar, 'kalaghar-jewels.com', [['http', 'critical', 4, 'HTTP_503'], ['tls', 'ok', 4, 'TLS_OK'], ['dns', 'ok', 4, 'DNS_OK']]);
 await site(agency, kalaghar, 'booking.kalaghar-jewels.com', ok(4));
 await site(agency, greenfield, 'greenfield-school.edu.in', ok(47));
 await site(agency, anand, 'anandchem.co.in', ok(1));
 await site(agency, anand, 'portal.anandchem.co.in', ok(1));
-await site(agency, skyline, 'skyline-realty.in', [['http', 'critical', 6, 'HTTP_TIMEOUT'], ['tls', 'unknown', 6, 'TLS_INCONCLUSIVE'], ['dns', 'critical', 6, 'DNS_SERVFAIL']]);
+await site(agency, skyline, 'skyline-realty.in', [['http', 'unknown', 6, 'HTTP_NOT_CHECKED'], ['tls', 'unknown', 6, 'TLS_NOT_CHECKED'], ['dns', 'critical', 6, 'DNS_SERVFAIL']]);
 await site(agency, fresh, 'newclient-store.in', [['http', 'ok', null], ['tls', 'ok', null], ['dns', 'ok', null]], { active: false });
 await site(agency, null, 'demo-agency.in', ok(2));
 
@@ -99,9 +125,29 @@ await db.query("UPDATE tickets SET state = 'quote_pending', version = version + 
 await ticket(shop.w, 'Contact form not sending', 'waiting_for_customer');
 await ticket(kj.w, 'Slow product pages');
 
+// Incidents (M3): one open, one resolved yesterday, with in-app alerts.
+const incident = async (w, t, code, root, openedMins, resolvedMins = null) => (await one(
+  `INSERT INTO incidents(workspace_id, website_id, monitor_target_id, status, root_kind, result_code, opened_at, first_failure_at, last_failure_at, resolved_at, recovered_cycle)
+   VALUES ($1, $2, $3, $4, $5, $6, now() - make_interval(mins => $7), now() - make_interval(mins => $7 + 10), now() - make_interval(mins => coalesce($8, 4)),
+           now() - make_interval(mins => $8), CASE WHEN $8 IS NULL THEN NULL ELSE 1 END) RETURNING id`,
+  [agency, w, t, resolvedMins === null ? 'open' : 'resolved', root, code, openedMins, resolvedMins])).id;
+const kjInc = await incident(kj.w, kj.t, 'HTTP_503', 'http', 14);
+const sky = (await one("SELECT w.id AS w, t.id AS t FROM websites w JOIN monitor_targets t ON t.website_id = w.id WHERE w.display_name = 'skyline-realty.in'"));
+const skyInc = await incident(sky.w, sky.t, 'DNS_SERVFAIL', 'dns', 16);
+const oldInc = await incident(shop.w, shop.t, 'HTTP_TIMEOUT', 'http', 26 * 60, 25 * 60);
+for (const [i, kind] of [[kjInc, 'opened'], [skyInc, 'opened'], [oldInc, 'opened'], [oldInc, 'resolved']]) {
+  await db.query("INSERT INTO incident_events(workspace_id, incident_id, kind) VALUES ($1, $2, $3)", [agency, i, kind]);
+}
+for (const u of [owner, tech]) {
+  for (const [i, kind] of [[kjInc, 'incident_opened'], [skyInc, 'incident_opened'], [oldInc, 'incident_resolved']]) {
+    await db.query('INSERT INTO notifications(workspace_id, user_id, incident_id, kind, read_at) VALUES ($1, $2, $3, $4, $5)',
+      [agency, u, i, kind, kind === 'incident_resolved' ? new Date() : null]);
+  }
+}
+
 // ------------------------------------------------------- solo workspace
 const solo = await workspace('Demo Solo', 'solo');
-await site(solo, null, 'my-portfolio.in', [['http', 'ok', 3, 'HTTP_200'], ['tls', 'warning', 3, 'TLS_EXPIRING'], ['dns', 'ok', 3, 'DNS_OK']]);
+await site(solo, null, 'my-portfolio.in', [['http', 'ok', 3, 'HTTP_OK'], ['tls', 'warning', 3, 'TLS_EXPIRING'], ['dns', 'ok', 3, 'DNS_OK']]);
 
 // -------------------------------------------------- load-test workspace
 if (bigSites > 0) {
