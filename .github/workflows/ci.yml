@@ -1,0 +1,74 @@
+# All suites on every push and pull request. Throwaway PostgreSQL in the runner;
+# the "devonly" passwords exist only inside this job and match db/docker/init.sh.
+name: CI
+on:
+  push:
+    branches: [main, 'm*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create roles and databases
+        run: |
+          for db in upfixy_dev upfixy_test upfixy_api_test; do
+            psql -v ON_ERROR_STOP=1 -v owner_pw=devonly -v app_pw=devonly -v worker_pw=devonly -v db="$db" -f db/bootstrap/roles.sql
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, pgsql, mbstring
+          coverage: none
+      - name: Composer install
+        working-directory: api
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Laravel environment
+        working-directory: api
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Migrate dev database
+        run: npm run db:migrate
+
+      - name: Core rules
+        run: npm test -w packages/core
+      - name: Database (RLS, hardening)
+        run: npm test -w db
+      - name: Web unit tests
+        run: npm test -w web
+      - name: Typecheck
+        run: npm run typecheck -w web && npm run typecheck -w packages/core
+      - name: API feature tests (incl. cross-tenant sweep)
+        run: npm run test:api
+      - name: Production build
+        run: npm run build

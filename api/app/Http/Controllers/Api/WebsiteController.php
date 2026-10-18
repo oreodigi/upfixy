@@ -28,6 +28,10 @@ class WebsiteController
     {
         $row = DB::selectOne('SELECT id, display_name, client_id, created_at FROM websites WHERE id = ?', [$website]);
         if (!$row) abort(404);
+        $row->targets = DB::select(
+            "SELECT id, host, state, scheme || '://' || host ||
+                    CASE WHEN (scheme = 'https' AND port = 443) OR (scheme = 'http' AND port = 80) THEN '' ELSE ':' || port END || path AS url
+               FROM monitor_targets WHERE website_id = ? ORDER BY host", [$website]);
         return response()->json($row);
     }
 

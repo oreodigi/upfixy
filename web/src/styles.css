@@ -209,3 +209,27 @@ button, input, select { font: inherit; color: inherit; }
 .hint { font-size: 13px; color: var(--ink-2); flex: 1 1 200px; }
 .empty { padding: 24px; text-align: center; color: var(--ink-2); background: var(--hatch); border-radius: var(--radius-card); }
 .ws-switch select { margin-top: 2px; min-height: 32px; border: 0; border-radius: 6px; background: #2c3c4a; color: #fff; padding: 0 6px; }
+
+/* ------------------------------------------------------------ M1 hardening UI */
+.panel { max-width: 860px; display: grid; gap: 14px; }
+.panel h1 { margin: 0; font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem); }
+.panel h2 { margin: 12px 0 0; font-size: 1.1rem; }
+.stack { display: grid; gap: 12px; }
+.banner { margin: 0; padding: 10px 16px; background: var(--warning-bg); color: var(--warning); font-size: 14px; }
+.card__actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.btn--sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.link--danger { color: var(--critical); }
+.qr { width: 180px; background: #fff; padding: 6px; border: 1px solid var(--line); border-radius: 8px; }
+.qr svg { display: block; width: 100%; height: auto; }
+code { font-family: inherit; font-weight: 700; overflow-wrap: anywhere; background: #f4f6f7; padding: 1px 4px; border-radius: 4px; }
+.codes { display: grid; grid-template-columns: repeat(2, max-content); gap: 4px 24px; margin: 0; padding: 0; list-style: none; font-weight: 700; }
+.instructions dl, .quote dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0; }
+.instructions dt, .quote dt { color: var(--ink-2); font-size: 14px; }
+.instructions dd, .quote dd { margin: 0; overflow-wrap: anywhere; }
+.quote { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); display: grid; gap: 10px; }
+.quote h3 { margin: 0; }
+.help textarea { min-height: 80px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; }
+.tag { margin-left: 8px; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--critical-bg); color: var(--critical); }
+tr.muted th, tr.muted td { color: var(--ink-2); }
+.plain { margin: 0; padding-left: 18px; }
+.list select { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }

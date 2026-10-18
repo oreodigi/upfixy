@@ -25,6 +25,7 @@ class TicketController
         $t = DB::selectOne('SELECT id, title, state, version, website_id, assignee_id FROM tickets WHERE id = ?', [$ticket]);
         if (!$t) abort(404);
         $t->allowed_next = TicketStates::TRANSITIONS[$t->state];
+        $t->quote = QuoteController::forTicket($ticket);
         $t->events = DB::select('SELECT from_state, to_state, reason, actor_id, created_at FROM ticket_events WHERE ticket_id = ? ORDER BY id', [$ticket]);
         return response()->json($t);
     }
@@ -79,26 +80,5 @@ class TicketController
         Audit::record('ticket.transition', 'allowed', 'ticket', $ticket, ['from' => $current->state, 'to' => $data['to']]);
 
         return response()->json(['id' => $ticket, 'state' => $data['to'], 'version' => $data['version'] + 1]);
-    }
-
-    /** SVC-003: the authorised payer approves an exact action (₹0 included). Payer rule enforced in DB. */
-    public function approve(Request $request, string $ticket): JsonResponse
-    {
-        $data = $request->validate([
-            'amount_paise' => ['required', 'integer', 'min:0', 'max:100000000'],
-            'action_fingerprint' => ['required', 'string', 'max:500'],
-            'expires_in_hours' => ['nullable', 'integer', 'min:1', 'max:168'],
-        ]);
-        if (!DB::selectOne('SELECT 1 AS x FROM tickets WHERE id = ?', [$ticket])) abort(404);
-        if (!$request->user()->email_verified_at) {
-            Audit::record('approval.create', 'denied', 'ticket', $ticket, ['reason' => 'email_unverified']);
-            abort(403, 'Verify your email address before approving work.');
-        }
-        $id = DB::selectOne("INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at)
-                             VALUES (?, ?, ?, ?, ?, now() + make_interval(hours => ?)) RETURNING id",
-            [TenantContext::workspaceId(), $ticket, $data['amount_paise'], $data['action_fingerprint'],
-                TenantContext::userId(), $data['expires_in_hours'] ?? 72])->id;
-        Audit::record('approval.created', 'allowed', 'approval', $id, ['ticket' => $ticket, 'amount_paise' => $data['amount_paise']]);
-        return response()->json(['id' => $id], 201);
     }
 }

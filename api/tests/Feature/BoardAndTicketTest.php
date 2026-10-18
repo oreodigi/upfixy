@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 
-/** BRD-001/002/003, MON-007, §18.2 workflow, SVC-003 approvals, payer rule. */
+/** BRD-001/002/003, MON-007, §18.2 workflow. Quotes and approvals: QuoteApprovalTest. */
 class BoardAndTicketTest extends TestCase
 {
     private array $f;
@@ -70,18 +70,6 @@ class BoardAndTicketTest extends TestCase
         $this->assertSame('denied', $this->auditRows('ticket.transition')[0]->outcome);
     }
 
-    public function test_ac_brd_003_1_resolved_needs_passed_verification(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['carl'], $f['ws'], 'POST', "tickets/{$t}/approvals", ['amount_paise' => 0, 'action_fingerprint' => 'x'])->assertCreated();
-        $this->owner()->update("UPDATE tickets SET state = 'ready_for_work', version = version + 1 WHERE id = ?", [$t]);
-        $this->owner()->update("UPDATE tickets SET state = 'in_progress', version = version + 1 WHERE id = ?", [$t]);
-        $this->owner()->update("UPDATE tickets SET state = 'verifying', version = version + 1 WHERE id = ?", [$t]);
-        $this->api($f['alice'], $f['ws'], 'POST', "tickets/{$t}/transition", ['to' => 'resolved', 'version' => 6])
-            ->assertStatus(422)->assertJsonPath('message', 'Post-fix verification has not passed.');
-    }
-
     public function test_ac_svc_001_1_stale_version_gets_409(): void
     {
         $f = $this->f;
@@ -97,61 +85,6 @@ class BoardAndTicketTest extends TestCase
         $t = $this->makeTicket($f['ws'], $f['site']);
         $this->api($f['carl'], $f['ws'], 'POST', "tickets/{$t}/transition", ['to' => 'investigating', 'version' => 1])
             ->assertForbidden();
-    }
-
-    public function test_ac_svc_003_3_zero_rupee_work_still_needs_client_approval(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['tina'], $f['ws'], 'POST', "tickets/{$t}/transition", ['to' => 'ready_for_work', 'version' => 3])
-            ->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'needs a current customer approval'));
-
-        $this->api($f['carl'], $f['ws'], 'POST', "tickets/{$t}/approvals",
-            ['amount_paise' => 0, 'action_fingerprint' => 'tls:renew:shop.mitra.example'])->assertCreated();
-        $this->api($f['tina'], $f['ws'], 'POST', "tickets/{$t}/transition", ['to' => 'ready_for_work', 'version' => 3])
-            ->assertOk()->assertJsonPath('state', 'ready_for_work');
-
-        $events = $this->owner()->select('SELECT from_state, to_state FROM ticket_events WHERE ticket_id = ?', [$t]);
-        $this->assertSame('ready_for_work', end($events)->to_state);
-        $this->assertSame('allowed', $this->auditRows('approval.created')[0]->outcome);
-    }
-
-    public function test_paid_work_waits_for_verified_payment(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['carl'], $f['ws'], 'POST', "tickets/{$t}/approvals",
-            ['amount_paise' => 10000, 'action_fingerprint' => 'dns:a-record'])->assertCreated();
-        $this->api($f['tina'], $f['ws'], 'POST', "tickets/{$t}/transition", ['to' => 'ready_for_work', 'version' => 3])
-            ->assertStatus(422);
-    }
-
-    public function test_ac_svc_003_4_agency_owner_cannot_approve_client_work_without_contract(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['alice'], $f['ws'], 'POST', "tickets/{$t}/approvals", ['amount_paise' => 0, 'action_fingerprint' => 'x'])
-            ->assertForbidden()->assertJsonPath('message', fn ($m) => str_contains($m, 'client contract'));
-
-        $this->owner()->update('UPDATE clients SET agency_may_pay = true WHERE id = ?', [$f['client']]);
-        $this->api($f['alice'], $f['ws'], 'POST', "tickets/{$t}/approvals", ['amount_paise' => 0, 'action_fingerprint' => 'x'])
-            ->assertCreated();
-    }
-
-    public function test_technician_can_never_approve(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['tina'], $f['ws'], 'POST', "tickets/{$t}/approvals", ['amount_paise' => 0, 'action_fingerprint' => 'x'])
-            ->assertForbidden();
-    }
-
-    public function test_ac_acc_001_2_unverified_email_cannot_approve(): void
-    {
-        $f = $this->f;
-        $t = $this->makeTicket($f['ws'], $f['site'], 'investigating', 'quote_pending');
-        $this->api($f['carlUnverified'], $f['ws'], 'POST', "tickets/{$t}/approvals", ['amount_paise' => 0, 'action_fingerprint' => 'x'])
-            ->assertForbidden()->assertJsonPath('message', 'Verify your email address before approving work.');
     }
 
     public function test_failed_request_leaves_no_partial_writes(): void
