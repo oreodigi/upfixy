@@ -121,6 +121,7 @@ class ConnectorController
     {
         $this->admin();
         $data = $request->validate(['api_token' => ['required', 'string', 'min:16', 'max:300', 'regex:/^[\x21-\x7E]+$/']]);
+        $this->find($connector);   // 404 for anything not visible, before any other answer
         $sealed = $this->seal($data['api_token']);
         unset($data);
         try {
