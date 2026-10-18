@@ -15,7 +15,7 @@ Run on 19 Oct 2026 (IST) on branch `hardening`, which contains `main` + M4 + M6 
 | Database / RLS / grants | `npm test -w db` | **86 passed** |
 | Web unit | `npm test -w web` | **23 passed** |
 | Typecheck web + core | `npm run typecheck` | pass |
-| API (PHPUnit) | `npm run test:api` | **314 passed, 4,470 assertions** |
+| API (PHPUnit) | `npm run test:api` | **315 passed, 4,489 assertions** (adds MetricsTest, UI branch) |
 | End to end (running servers) | `python3 scripts/e2e.py` | **40/40 passed** |
 | Screens + axe WCAG 2.1 AA | `node scripts/screens.mjs` | **26 screens × 3 widths: 78/78 clean, 0 overflow** |
 | Keyboard only | `node scripts/keyboard.mjs` | **31 PASS** |
@@ -66,3 +66,14 @@ Run on 19 Oct 2026 (IST) on branch `hardening`, which contains `main` + M4 + M6 
 - Multi-region probes.
 - Real devices with screen readers.
 - Scheduled backups and a production-size restore.
+
+## UI redesign phase 1 (branch `ui-redesign`, 19 Oct 2026)
+
+| Suite | Result |
+| --- | --- |
+| Screens + axe WCAG 2.1 AA, 26 screens × 320/390/1440 | **78/78 clean, 0 px horizontal overflow** |
+| Keyboard only (390 and 1440) | **31 PASS** |
+| End to end | **40/40** |
+| Web unit + typecheck | 23 passed; pass |
+
+The test scripts now target visible elements: on phones the boards show one lane at a time. Screens that need fresh readings (Analyze) require a recent `seed-dev` run.
