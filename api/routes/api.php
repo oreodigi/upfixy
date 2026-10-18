@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\QuoteController;
+use App\Http\Controllers\Api\ConnectorController;
 use App\Http\Controllers\Api\RepairController;
 use App\Http\Controllers\Api\SavedViewController;
 use App\Http\Controllers\Api\TicketController;
@@ -80,6 +81,17 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::post('websites/{website}/diagnose', [DiagnosticController::class, 'start'])->whereUuid('website')->middleware('throttle:10,1');
         Route::get('websites/{website}/diagnostics', [DiagnosticController::class, 'index'])->whereUuid('website');
         Route::get('diagnostics/{run}', [DiagnosticController::class, 'show'])->whereUuid('run');
+
+        // M4 read-only connectors (INT-001…006, AST-004)
+        Route::get('connectors', [ConnectorController::class, 'index']);
+        Route::post('connectors', [ConnectorController::class, 'store'])->middleware(['mfa.fresh', 'throttle:20,1']);
+        Route::get('connectors/{connector}', [ConnectorController::class, 'show'])->whereUuid('connector');
+        Route::get('connectors/{connector}/events', [ConnectorController::class, 'events'])->whereUuid('connector');
+        Route::post('connectors/{connector}/rotate', [ConnectorController::class, 'rotate'])->whereUuid('connector')->middleware('mfa.fresh');
+        Route::post('connectors/{connector}/revoke', [ConnectorController::class, 'revoke'])->whereUuid('connector')->middleware('mfa.fresh');
+        Route::post('connectors/{connector}/import', [ConnectorController::class, 'import'])->whereUuid('connector')->middleware('throttle:20,1');
+        Route::post('connectors/{connector}/ignore', [ConnectorController::class, 'ignore'])->whereUuid('connector');
+        Route::get('websites/{website}/providers', [ConnectorController::class, 'forWebsite'])->whereUuid('website');
 
         // M7 controlled repairs (FIX-003..005)
         Route::get('websites/{website}/dns-connections', [RepairController::class, 'connections'])->whereUuid('website');

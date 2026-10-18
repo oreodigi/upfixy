@@ -110,6 +110,27 @@ await site(agency, skyline, 'skyline-realty.in', [['http', 'unknown', 6, 'HTTP_N
 await site(agency, fresh, 'newclient-store.in', [['http', 'ok', null], ['tls', 'ok', null], ['dns', 'ok', null]], { active: false });
 await site(agency, null, 'demo-agency.in', ok(2));
 
+// M4: a verified ownership proof for shop.mitratraders.in and a read-only WHM reseller connection
+// (dummy sealed token: the dev connector worker can't open it, which is fine for the demo).
+await db.query(`INSERT INTO ownership_claims(workspace_id, website_id, host, method, nonce, status, verified_at, expires_at, challenge_expires_at)
+  VALUES ($1, $2, 'shop.mitratraders.in', 'dns_txt', 'demo-nonce-' || gen_random_uuid(), 'verified', now() - interval '1 day', now() + interval '89 days', now())`, [agency, shop.w]);
+const whm = (await one(`INSERT INTO connectors(workspace_id, kind, label, base_host, username, secret_sealed, declared_capabilities, verified_capabilities,
+    status, resource_scope, created_by, last_success_at, next_sync_at, sync_no)
+  VALUES ($1, 'whm_reseller', 'Larihost reseller (demo)', 'panel.demo-reseller.test', 'demores', 'v1:demo-not-a-real-token',
+    connector_declared('whm_reseller'), connector_declared('whm_reseller'), 'active', '{"reseller":"demores","accounts":3}', $2, now() - interval '20 minutes',
+    now() + interval '40 minutes', 1) RETURNING id`, [agency, owner])).id;
+const asset = (kind, ext, name, parent, facts, websiteId = null) => db.query(`INSERT INTO connector_assets(workspace_id, connector_id, kind, external_id, name,
+  parent_external_id, facts, last_seen_sync, import_state, website_id) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)`,
+  [agency, whm, kind, ext, name, parent, JSON.stringify(facts), websiteId ? 'imported' : 'discovered', websiteId]);
+const sslUntil = (d) => ({ not_after: new Date(Date.now() + d * 864e5).toISOString(), self_signed: false, issuer: "Let's Encrypt" });
+await asset('account', 'mitrashop', 'shop.mitratraders.in', null, { suspended: false, plan: 'demores_basic', disk_used: '840M', disk_limit: '2048M' }, shop.w);
+await asset('domain', 'shop.mitratraders.in', 'shop.mitratraders.in', 'mitrashop', { ssl: sslUntil(9), ssl_known: true }, shop.w);
+await asset('account', 'sunrise', 'sunrise-bakery.in', null, { suspended: false, plan: 'demores_basic', disk_used: '210M', disk_limit: '1024M' });
+await asset('domain', 'sunrise-bakery.in', 'sunrise-bakery.in', 'sunrise', { ssl: sslUntil(61), ssl_known: true });
+await asset('domain', 'orders.sunrise-bakery.in', 'orders.sunrise-bakery.in', 'sunrise', { ssl: null, ssl_known: true });
+await asset('account', 'oldclient', 'old-client.in', null, { suspended: true, suspend_reason: 'Unpaid invoice', plan: 'demores_basic' });
+await asset('domain', 'old-client.in', 'old-client.in', 'oldclient', { ssl: sslUntil(-3), ssl_known: true });
+
 // Tickets in several stages.
 const ticket = async (w, title, ...states) => {
   const id = (await one("INSERT INTO tickets(workspace_id, website_id, title) VALUES ($1, $2, $3) RETURNING id", [agency, w, title])).id;

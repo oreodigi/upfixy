@@ -1,62 +1,80 @@
 # Implementation status
 
-As of 18 October 2026. Requirements: [FRD v0.3](FRD.md). Nothing is deployed, merged to `main`, or connected to a real provider, payment gateway or server.
+Requirements: [FRD v0.3](FRD.md). Updated after every completed feature. Nothing is deployed or connected to a real provider, payment gateway or server.
 
-**Status words.** *Built* means the code exists and its automated tests pass locally. It does **not** mean the milestone exit gate is met or that the feature is production-ready. *Gate met* is used only when every exit criterion in FRD §22/§25.7 is evidenced.
+**States**
+
+| State | Meaning |
+| --- | --- |
+| Not started | No code |
+| In progress | Code being written; not on a PR yet |
+| Implemented | Code on a PR; tests incomplete or not all ACs covered |
+| Tests passed | Code and automated tests for the listed ACs pass locally and in CI. **Not** a milestone exit: real-provider, staging and UAT evidence may still be missing |
+| Blocked | Cannot progress without a founder decision, an account or an approval (named) |
+| Founder accepted | Founder has reviewed and accepted against the exit gate |
+
+`main` at the time of writing: `f8bd759` (M1, M2, M3, M5, M7 consolidated through #7).
 
 ## Milestones
 
-| Milestone | Branch / PR | Status | Exit gate |
+| Milestone | State | PRs | What blocks the exit gate |
 | --- | --- | --- | --- |
-| M0 Discovery lock | — | D-04, D-07 approved; D-01, D-02 deferred | Met for design only |
-| M1 Tenant foundation | `m1-hardening` / #1 (base `main`) | Built, audited, 6 findings fixed (S-01…S-05 plus ticket delete) | Not met: needs founder review and merge |
-| M2 Boards and UX | `m2-boards` / #2 (base `m1-hardening`) | Built | Not met: real-device and screen-reader check pending |
-| M3 Public monitoring | `m3-monitoring` / #3 (base `m2-boards`) | Built: worker, DNS/HTTP/TLS probes, incidents, alerts, 46-guide help library | Not met: needs a staging host for a real egress and load test (D-22) |
-| M4 Read-only adapters | — | **Not started**: needs pilot test accounts (WHM reseller, cPanel, Cloudflare read-only) | Not met |
-| M5 Diagnostics + AI | `m5-diagnostics` / #4 (base `m3-monitoring`) | Built: evidence snapshot, rule engine, OpenAI gateway (off until a model is chosen) | Not met: model, region and retention decisions open (§25.8); no live model test |
-| M6 Commercial support | — | Partly built in M1 (quotes, approvals). **No payment writer, invoices or Razorpay** | Not met: D-05, D-06, D-14 unsigned |
-| M7 Controlled repairs | `m7-repairs` / #5 (base `m5-diagnostics`) | Executor built against a fake provider; platform switch off and global kill switch paused by default | **Not met**: no synthetic Cloudflare test-zone run, no M6 payments, no restore drill, no pilot sign-off |
+| M1 Tenant foundation | Tests passed | #1 | Founder acceptance |
+| M2 Boards and UX | Tests passed | #2, #7 | Real phone + screen reader check |
+| M3 Public monitoring | Tests passed | #7 | Staging egress and load test (D-22) |
+| M4 Read-only connectors | Tests passed (mocked providers) | #8 | **Blocked:** negative-scope tests on pilot test accounts (Larihost, Peak99, SKClouds) need founder-authorised test credentials |
+| M5 Diagnostics + AI | Tests passed (fake model) | #7 | **Blocked:** model, region, retention, budget (§25.8) |
+| M6 Commercial support | In progress | — | D-05, D-06, D-14, D-18, D-23 |
+| M7 Controlled repairs | Tests passed (fake provider); disabled | #7 | **Blocked:** test-zone run, M6 payments, restore drill, C-1…C-5 |
 
-M7 was built ahead of M4 and M6 because the brief made it P0. It cannot run end to end until M6 records verified payments: today only a database owner can set `payment_verified`, and tests do exactly that.
+## Features
 
-## Traceability (FRD ID → implementation → tests → PR)
+| FRD ID | Feature | State | ACs evidenced | Implementation | Tests | PR |
+| --- | --- | --- | --- | --- | --- | --- |
+| ACC-001/002/005 | Signup, verification, MFA, invitations | Tests passed | AC-ACC-* (README list) | `AuthController`, `MfaController`, `InvitationController`, 0006/0007 | AccountSecurityTest, TenancyTest, e2e.py | #1 |
+| ACC-003/004/006 | Workspaces, switcher, clients | Tests passed | IDOR sweep | 0001, 0004, `WorkspaceController`, `ClientController` | rls.test.mjs, CrossTenantSweepTest | #1 |
+| ACC-007 | Immutable audit | Implemented | — | `audit_events` append-only | hardening.test.mjs | #1 (hash chain: not started) |
+| AST-001/002/003 | Add by URL, ownership proof, duplicate claims | Tests passed | AC-AST-002.2…002.7 | 0008, `OwnershipController`, `ClaimController` | OwnershipTest | #1 |
+| AST-004 | Asset graph per website | Tests passed | AC-AST-004.1 (zone + hosting shown separately) | `website_provider_links()`, `ProviderPanel` | ConnectorsTest `test_website_shows_provider_links_but_facts_need_ownership_proof` | #8 |
+| BRD-001…006 | Boards, lists, icons, mobile, keyboard | Tests passed | AC-BRD-* | 0010, `BoardController`, web pages | BoardsM2Test, screens.mjs, keyboard.mjs | #2 |
+| MON-001…003, 005…008 | Probes, scheduler, SSRF, freshness, incidents | Tests passed | AC-MON-* | `app/Monitoring/*`, 0011 | ProbesTest, TransportsTest, MonitoringTest | #7 |
+| ALR-001 | Email + in-app alerts | Tests passed | — | `IncidentMail`, `NotificationController` | MonitoringTest | #7 |
+| KB-001…003 | Help library (46), Check now | Tests passed | — | `packages/core/issues` | vectors, keyboard.mjs | #7 |
+| INT-001 | Connector framework | Tests passed | AC-INT-001.1, AC-INT-001.2 | 0014, `app/Connectors/*`, `SyncRunner`, `upfixy:connectors` | ConnectorsTest (revocation, rotation, outage) | #8 |
+| INT-002 | WHM reseller connector | Tests passed (mocked) | AC-INT-002.1, .2, .3, .4 | `WhmResellerAdapter` | ConnectorsTest (root token, cross-reseller, pagination, vhost scope, re-check on sync) | #8 |
+| INT-003 | cPanel account connector | Tests passed (mocked) | AC-INT-003.1 | `CpanelAdapter` (allowlist) | ConnectorsTest `test_cpanel_account_reads_only_allowlisted_functions` | #8 |
+| INT-004 | Cloudflare read-only connector | Tests passed (mocked) | AC-INT-004.1 | `CloudflareReadAdapter` | ConnectorsTest | #8 |
+| INT-005 | Registrar connector | Not started | — | — | — | Blocked on D-03 |
+| INT-006 | Import preview, selective import | Tests passed | AC-INT-006.1, AC-INT-006.2 | `ConnectorController::import` | ConnectorsTest `test_import_needs_explicit_selection_and_flags_ambiguous_client_mapping` | #8 |
+| DX-001…004 | Analyze, rules, report, responsibility | Tests passed | AC-DX-* | 0012, `Diagnostics/*` | DiagnosticsTest | #7 |
+| DX-005/006 | AI analysis + gateway | Tests passed (fake model); off | AC-DX-005.1…5, AC-DX-006.1/2 | `Diagnostics/Ai/*` | DiagnosticsTest, OpenAiClientTest | #7 |
+| SVC-001…003 | Tickets, catalogue, quote approvals | Tests passed | AC-SVC-003.* | 0003, 0009, `QuoteController` | QuoteApprovalTest | #1 |
+| SVC-004/005 | Razorpay, invoices, refunds | In progress | — | — | — | — |
+| FIX-001/002 | Technician fix, post-fix verification | Implemented | — | Ticket stages, recheck | MonitoringTest | #7 |
+| FIX-003…005 | Automated DNS fix | Tests passed (fake provider); disabled | AC-FIX-003.2…5, 004.1…4, 005.1…4 (003.1 needs a real test zone) | 0013, `Repairs/*` | RepairsTest (26) | #7 |
 
-| FRD ID | Implementation | Tests | PR | Status |
+Details: [AI_DIAGNOSTICS.md](AI_DIAGNOSTICS.md), [REPAIR_ENGINE.md](REPAIR_ENGINE.md), [SECURITY.md](SECURITY.md), [TEST_RESULTS.md](TEST_RESULTS.md).
+
+## M4 connector capability matrix (what the code asks for and calls)
+
+| Connector | Credential | Calls (GET only) | Declared capabilities | Refused when |
 | --- | --- | --- | --- | --- |
-| ACC-001/002/005 | `AuthController`, `MfaController`, `InvitationController`, migrations 0006/0007 | AccountSecurityTest, TenancyTest, e2e.py | #1 | Built |
-| ACC-003/004/006 | 0001, 0004, `WorkspaceController`, `ClientController` | TenancyTest, rls.test.mjs, CrossTenantSweep | #1 | Built |
-| ACC-007 | `audit_events` (0003), append-only trigger | hardening.test.mjs | #1 | Built. Not hash-chained (see SECURITY.md) |
-| AST-001/002/003 | 0008, `OwnershipController`, `ClaimController` | OwnershipTest, hardening.test.mjs | #1 | Built |
-| AST-004 | — | — | — | Not started (needs M4) |
-| BRD-001…006 | 0010, `BoardController`, `web/src/pages/*` | BoardsM2Test, BoardAndTicketTest, screens.mjs, keyboard.mjs | #2 | Built |
-| BRD-007 | — | — | — | P1, not started |
-| MON-001/002/003 | `app/Monitoring/*Probe`, custom DNS client | ProbesTest (30), TransportsTest (11) | #3 | Built |
-| MON-005/007/008 | 0011, `CycleRunner`, `IncidentDebounce` | MonitoringTest (15), shared incident vectors, MonitorCapacityTest | #3 | Built |
-| MON-006 | `url-guard` (core) and PHP port; pinned resolve; manual redirects | url-guard.test.ts (60), ProbesTest | #1, #3 | Built |
-| MON-004/009 | — | — | — | P1, not started |
-| ALR-001 | `notifications`, `IncidentMail`, `NotificationController` | MonitoringTest | #3 | Built (mail driver is log-only locally) |
-| KB-001/002/003 | `packages/core/issues/issues.json` (46 guides), Help panel, Check now | vectors, keyboard.mjs | #2, #3 | Built |
-| INT-001…006 | — | — | — | **Not started (M4)**. Only the DNS-edit connection used by FIX-003 exists |
-| DX-001/002/003/004 | 0012, `SnapshotBuilder`, `RuleEngine`, `DiagnosisService`, SCR-11 | DiagnosticsTest (17) | #4 | Built |
-| DX-005/006 | `Diagnostics/Ai/*` | DiagnosticsTest, OpenAiClientTest (4) | #4 | Built; disabled until a model is configured |
-| SVC-001/002/003 | 0003, 0009, `QuoteController` | QuoteApprovalTest (11) | #1 | Built |
-| SVC-004/005/006 | — | — | — | **Not started (M6)** |
-| FIX-001/002 | Ticket stages and recheck | MonitoringTest | #3 | Partly built (no checklist yet) |
-| FIX-003/004/005 | 0013, `app/Repairs/*`, `RepairController`, `pages/Repairs.tsx` | RepairsTest (24), CrossTenantSweep | #5 | Built against a fake provider; not test-zone verified |
+| Cloudflare | API token (Bearer) | `/user/tokens/verify`, `/zones`, `/zones/{id}/dns_records`, `/zones/{id}/dnssec` | zones.read, dns.read, dnssec.read | Token inactive or refused; no zones visible. Warns when it sees several zones |
+| WHM reseller | `whm user:token`, port 2087 | `myprivs`, `listaccts` (chunked), `fetch_ssl_vhosts` | accounts.read, domains.read, ssl.read | `all` privilege (root-equivalent); no `list-accts`; any account or vhost not owned by this reseller (checked on **every** sync, every page) |
+| cPanel | `cpanel user:token`, port 2083 | `DomainInfo/list_domains`, `SSL/installed_hosts` only | domains.read, ssl.read | Token refused; no main domain |
 
-Acceptance-criterion detail for M5 and M7 is in [AI_DIAGNOSTICS.md](AI_DIAGNOSTICS.md) and [REPAIR_ENGINE.md](REPAIR_ENGINE.md).
+All response shapes are **EXT, unverified** until run against pilot test accounts (FRD §7 S12–S14).
 
 ## Where the code differs from the FRD (needs founder confirmation)
 
-None of these was decided silently; each defaults to the safer reading.
-
-| # | FRD says | Code does | Why |
-| --- | --- | --- | --- |
-| C-1 | §25.4(8): rollback runs through a "separately approved rollback workflow" | Rollback is described in the quote the payer approves (`plan.rollback`), so approving the quote pre-approves rollback of that one change | A second approval mid-incident would leave a broken record live. **Confirm or reject.** |
-| C-2 | §25.4(4): ₹0 work needs "proven provider-side coverage" | The executor **refuses every ₹0 repair** | Coverage contracts don't exist until M6. |
-| C-3 | §25.4(7): failed verification is "indeterminate" | Rollback only happens when the failure is attributable to our change (the site was healthy before and broke after, or DNS shows a different value). Otherwise the attempt goes to *needs technician* | This avoids undoing a correct fix just because the site was already down for another reason. |
-| C-4 | AC-FIX-004.1: a provider error *after* mutation | The executor re-reads the record. If our write landed, it is rolled back; if it did not land, it gets exactly one retry | This is AC-FIX-004.3 reconciliation applied to errors too. |
-| C-5 | §25.2 SCR-09/10: "short-lived/scoped DNS-edit capability" | A zone-scoped Cloudflare token, sealed so the API cannot read it; revocable and rotatable; not short-lived | Short-lived tokens need a broker. Open with §25.8 "who holds the token". |
-| C-6 | §22 order: M4 before M7 | M7 has its own executor-only Cloudflare adapter; there is no read-only Cloudflare connector yet | Brief marked M7 P0; M4 needs pilot accounts. |
-| C-7 | SCR-12 price/tax/named merchant | Price is shown; tax and merchant are not | Depends on D-05/D-06/D-14 (M6). |
-| C-8 | NFR-14 workspace deletion | Workspaces with quotes cannot be deleted (financial records) | Needs a soft-close design (D-12). |
+| # | FRD says | Code does |
+| --- | --- | --- |
+| C-1 | §25.4(8) separate rollback approval | Approving the quote pre-approves rollback of that one change |
+| C-2 | ₹0 needs proven coverage | Executor refuses all ₹0 automated repairs until coverage records exist (M6) |
+| C-3 | Failed verification is indeterminate | Roll back only when the failure is attributable to our change |
+| C-4 | AC-FIX-004.1 | Provider error after write → re-read; roll back if landed, else one retry |
+| C-5 | Short-lived DNS-edit capability | Zone-scoped token sealed to the executor; revocable, not short-lived |
+| C-6 | §7: Cloudflare read and edit tokens separate | Done: read connector (M4) and repair DNS-edit connection (M7) are separate tables, keys and processes |
+| C-7 | SCR-12 tax/merchant | Not shown until D-05/D-06/D-14 |
+| C-8 | NFR-14 workspace deletion | Needs soft close (D-12) |
+| C-9 | §14: connector alone is not domain control | Import never creates ownership; provider facts on a website need ownership proof or delegation |

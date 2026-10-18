@@ -24,7 +24,8 @@ class CrossTenantSweepTest extends TestCase
     private const WATCHED = ['workspaces', 'memberships', 'clients', 'client_assignments', 'websites', 'monitor_targets',
         'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
         'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs',
-        'diagnostic_runs', 'findings', 'ai_analyses', 'dns_connections', 'repair_drafts', 'repair_attempts', 'repair_events', 'repair_controls'];
+        'diagnostic_runs', 'findings', 'ai_analyses', 'dns_connections', 'repair_drafts', 'repair_attempts', 'repair_events', 'repair_controls',
+        'connectors', 'connector_assets', 'connector_events'];
 
     protected function setUp(): void
     {
@@ -104,6 +105,16 @@ class CrossTenantSweepTest extends TestCase
             [$v['ws'], $v['repair_ticket'], $rq->id, $v['approval'], $v['connection'], str_repeat('ab', 16), str_repeat('cd', 16), $plan, $rq->fingerprint, $v['alice']->id])->id;
         $this->owner()->insert("INSERT INTO repair_events(workspace_id, attempt_id, kind, detail) VALUES (?, ?, 'write', '{\"ref\": \"victim-ray\"}')", [$v['ws'], $v['attempt']]);
         $this->owner()->insert("INSERT INTO repair_controls(workspace_id, paused, reason) VALUES (?, true, 'Victim paused')", [$v['ws']]);
+        // M4: an active WHM connector with a discovered and an imported asset.
+        $v['connector'] = $this->owner()->selectOne(
+            "INSERT INTO connectors(workspace_id, kind, label, base_host, username, secret_sealed, declared_capabilities, verified_capabilities, status, created_by, last_success_at)
+             VALUES (?, 'whm_reseller', 'Victim WHM', 'panel.victim.example', 'victimr', 'v1:victim-whm-sealed', connector_declared('whm_reseller'),
+                     connector_declared('whm_reseller'), 'active', ?, now()) RETURNING id", [$v['ws'], $v['alice']->id])->id;
+        $v['asset'] = $this->owner()->selectOne(
+            "INSERT INTO connector_assets(workspace_id, connector_id, kind, external_id, name, facts, last_seen_sync)
+             VALUES (?, ?, 'domain', 'victim-hidden.example', 'victim-hidden.example', '{\"plan\": \"Victim work\"}', 1) RETURNING id", [$v['ws'], $v['connector']])->id;
+        $this->owner()->insert("INSERT INTO connector_assets(workspace_id, connector_id, kind, external_id, name, facts, last_seen_sync, import_state, website_id)
+             VALUES (?, ?, 'account', 'victim', 'victim-secret.example', '{\"plan\": \"Victim work\"}', 1, 'imported', ?)", [$v['ws'], $v['connector'], $v['site']]);
         $this->v = $v;
     }
 
@@ -137,6 +148,10 @@ class CrossTenantSweepTest extends TestCase
             'POST api/v1/dns-connections/{connection}/rotate' => ['api_token' => 'attacker-token-00000000'],
             'POST api/v1/tickets/{ticket}/repair-drafts' => ['connection_id' => $v['connection'], 'monitor_target_id' => $v['target'], 'record_id' => str_repeat('cd', 16), 'proposed_content' => '93.184.216.36'],
             'POST api/v1/approvals/{approval}/repairs' => ['idempotency_key' => 'attacker-key-01'],
+            'GET api/v1/connectors/{connector}', 'GET api/v1/connectors/{connector}/events', 'POST api/v1/connectors/{connector}/revoke',
+            'GET api/v1/websites/{website}/providers' => [],
+            'POST api/v1/connectors/{connector}/rotate' => ['api_token' => 'attacker-token-00000000'],
+            'POST api/v1/connectors/{connector}/import', 'POST api/v1/connectors/{connector}/ignore' => ['asset_ids' => [$v['asset']]],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -159,6 +174,7 @@ class CrossTenantSweepTest extends TestCase
             'draft' => $this->v['draft'],
             'approval' => $this->v['approval'],
             'attempt' => $this->v['attempt'],
+            'connector' => $this->v['connector'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }
@@ -191,7 +207,7 @@ class CrossTenantSweepTest extends TestCase
         $this->assertGreaterThanOrEqual(20, count($routes), 'route discovery looks broken');
         $before = $this->snapshot();
         $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'victim-cf-token-secret', 'victim-ray', 'Victim DNS change', 'alice@test.local', 'pending@test.local',
-            'Victim view', $this->v['fingerprint']];
+            'Victim view', $this->v['fingerprint'], 'victim-hidden.example', 'panel.victim.example', 'victim-whm-sealed'];
 
         foreach ($routes as [$method, $uri]) {
             $path = preg_replace_callback('/\{(\w+)\}/', fn ($m) => $this->param($m[1]), substr($uri, strlen('api/v1/')));
