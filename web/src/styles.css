@@ -435,3 +435,20 @@ tr.muted th, tr.muted td { color: var(--ink-2); }
 .steps li.end--rolled_back::before, .steps li.end--needs_technician::before { content: '!'; background: var(--warning-bg); color: var(--warning); border-color: var(--warning); }
 .steps li.end--refused::before { content: '–'; background: var(--surface); color: var(--ink-2); border-color: var(--ink-2); }
 .repair .stack { margin-top: 16px; }
+
+/* M4 integrations */
+.kv { display: grid; grid-template-columns: minmax(84px, max-content) 1fr; gap: 6px 12px; margin: 12px 0; }
+.kv dt { font-weight: 700; color: var(--ink-2); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.status { margin: 4px 0; overflow-wrap: anywhere; }
+.status--ok strong { color: var(--healthy); }
+.status--warning strong { color: var(--warning); }
+.status--unknown strong { color: var(--unknown); }
+label.check { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; cursor: pointer; }
+label.check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.lede { color: var(--ink-2); max-width: 70ch; }
+.providers .row__main { min-width: 0; }
+.btn--danger { background: var(--critical); color: #fff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.stack > .btn { justify-self: start; }

@@ -11,6 +11,8 @@ export type Route =
   | { name: 'team' }
   | { name: 'settings' }
   | { name: 'alerts' }
+  | { name: 'integrations' }
+  | { name: 'integration'; id: string }
   | { name: 'diagnostic'; id: string }
   | { name: 'not_found' };
 
@@ -28,6 +30,8 @@ export function parse(path: string, search = ''): Route {
   if (p === '/work') return { name: 'work', ticket: q.get('ticket') ?? undefined };
   if (p === '/team') return { name: 'team' };
   if (p === '/alerts') return { name: 'alerts' };
+  if (p === '/integrations') return { name: 'integrations' };
+  if ((m = p.match(new RegExp(`^/integrations/(${UUID})$`)))) return { name: 'integration', id: m[1] };
   if ((m = p.match(new RegExp(`^/diagnostics/(${UUID})$`)))) return { name: 'diagnostic', id: m[1] };
   if (p === '/settings' || p === '/security') return { name: 'settings' };
   return { name: 'not_found' };
@@ -38,6 +42,7 @@ export function href(r: Route): string {
     case 'overview': return '/';
     case 'client': return `/clients/${r.id}`;
     case 'diagnostic': return `/diagnostics/${r.id}`;
+    case 'integration': return `/integrations/${r.id}`;
     case 'website': return `/websites/${r.id}${r.tab && r.tab !== 'overview' ? `/${r.tab}` : ''}`;
     case 'work': return r.ticket ? `/work?ticket=${r.ticket}` : '/work';
     case 'not_found': return '/';

@@ -1,5 +1,6 @@
 // SCR-07 Website detail: one tab per area, every value with its source and age.
 import { DnsConnections } from './Repairs';
+import { ProviderPanel } from './Integrations';
 import { useEffect, useState } from 'react';
 import { TICKET_LABELS } from '@upfixy/core';
 import { api, ApiError, type ApiCheck, type ApiHistoryRow, type ApiIncident, type ApiWebsiteDetail } from '../api';
@@ -21,7 +22,7 @@ const SEV_LABEL: Record<ApiCheck['severity'], string> = { ok: 'OK', warning: 'Wa
 const SOURCE: Record<ApiCheck['source'], string> = { public: 'Public check', connector: 'Provider connection', user: 'Reported by you' };
 
 const NOT_CONNECTED: Partial<Record<Tab, { title: string; body: string }>> = {
-  hosting: { title: 'Hosting is not connected', body: 'Upfixy can only see what anyone on the internet sees. Connecting a read-only hosting account (cPanel or WHM reseller) adds disk, resource-limit and AutoSSL checks. Connections arrive in a later release.' },
+  hosting: { title: 'Hosting details', body: 'Upfixy sees only what anyone on the internet sees unless a read-only hosting connection (WHM reseller or cPanel) is linked to this website and its ownership is verified. Owners and admins connect providers under Integrations.' },
   security: { title: 'Security is not assessed yet', body: 'Public checks don’t cover malware or vulnerable software. This stays “Not assessed”, never “Secure”, until a scanner or hosting connection reports.' },
   backups: { title: 'Backups are not connected', body: 'Upfixy shows backup status only when a hosting or backup provider reports it. Until then we can’t tell whether backups exist, so we don’t claim they do.' },
 };
@@ -243,15 +244,20 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
             <Readings checks={checks} />
             <h2>History</h2>
             <History id={id} kind={kind} />
+            {tab === 'domain' && <ProviderPanel websiteId={id} kinds={['cloudflare']} />}
+            {tab === 'ssl' && <ProviderPanel websiteId={id} kinds={['whm_reseller', 'cpanel']} />}
             {tab === 'domain' && ['owner', 'admin', 'technician'].includes(role) && <DnsConnections websiteId={id} />}
           </>
         )}
-        {NOT_CONNECTED[tab] && (
-          <div className="notice">
-            <h2>{NOT_CONNECTED[tab]!.title}</h2>
-            <p>{NOT_CONNECTED[tab]!.body}</p>
-          </div>
-        )}
+        {NOT_CONNECTED[tab] && (() => {
+          const note = (
+            <div className="notice">
+              <h2>{NOT_CONNECTED[tab]!.title}</h2>
+              <p>{NOT_CONNECTED[tab]!.body}</p>
+            </div>
+          );
+          return tab === 'hosting' ? <ProviderPanel websiteId={id} kinds={['whm_reseller', 'cpanel']} fallback={note} /> : note;
+        })()}
         {tab === 'activity' && (<><h2>All readings</h2><History id={id} /></>)}
         {!verified && tab !== 'overview' && !NOT_CONNECTED[tab] && (
           <p className="hint">Only public checks are shown. Verify ownership to see private readings from provider connections.</p>

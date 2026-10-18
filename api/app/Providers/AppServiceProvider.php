@@ -18,6 +18,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(Resolver::class, SystemResolver::class);
+        $this->app->bind(\App\Connectors\ConnectorHttp::class, fn ($app) => new \App\Connectors\CurlConnectorHttp($app->make(Resolver::class), config('upfixy.egress_proxy')));
         $this->app->bind(HttpTransport::class, fn () => new CurlTransport(config('upfixy.egress_proxy')));
 
         // M3 monitoring. Tests replace DnsClient, HttpFetcher and TlsInspector with fakes.

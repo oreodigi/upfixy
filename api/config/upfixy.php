@@ -54,6 +54,15 @@ return [
         'reuse_minutes' => 60,   // same evidence within this window returns the existing report (AC-DX-006.2)
     ],
 
+    // M4 read-only connectors (INT-001…004). Tokens are sealed to the connector worker's key.
+    'connectors' => [
+        'public_key' => env('UPFIXY_CONNECTOR_PUBLIC_KEY'),   // API: seals provider tokens
+        'keypair' => env('UPFIXY_CONNECTOR_KEYPAIR'),         // CONNECTOR WORKER ONLY
+        'cloudflare_base' => env('UPFIXY_CLOUDFLARE_BASE', 'https://api.cloudflare.com/client/v4'),
+        'batch' => 10,
+        'lease_seconds' => 120,
+    ],
+
     // M7 controlled repairs (FIX-003..005). Three switches must all allow a write:
     // this flag (default OFF), the global DB kill switch (starts paused) and the workspace switch.
     'repairs' => [

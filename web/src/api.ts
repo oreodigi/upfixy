@@ -210,3 +210,23 @@ export type RepairState = 'queued' | 'preflight' | 'executing' | 'verifying' | '
 export interface ApiRepairAttempt { id: string; state: RepairState; customer_message: string | null; state_reason?: string; plan?: RepairPlan; created_at: string; updated_at: string;
   events?: Array<{ kind: string; at: string; detail?: Record<string, unknown> }> }
 export interface ApiRepairControls { platform_enabled: boolean; global: { paused: boolean; reason: string | null }; workspace: { paused: boolean; reason: string | null; changed_at: string | null } }
+
+// ----------------------------------------------------------------- M4 types
+export type ConnectorKind = 'cloudflare' | 'whm_reseller' | 'cpanel';
+export interface ApiConnector {
+  id: string; kind: ConnectorKind; label: string; host: string | null; username: string | null;
+  status: 'verifying' | 'active' | 'rejected' | 'error' | 'revoked'; status_reason: string | null;
+  declared_capabilities: string[]; verified_capabilities: string[]; scope: Record<string, unknown> | null; warnings: string[];
+  secret_version: number; last_success_at: string | null; last_attempt_at: string | null; next_sync_at: string; error_class: string | null;
+  created_at: string; revoked_at: string | null; stale: boolean;
+}
+export interface ApiConnectorAsset {
+  id: string; kind: 'zone' | 'account' | 'domain'; external_id: string; name: string; parent_external_id: string | null;
+  facts: Record<string, unknown>; last_seen_at: string; gone_at: string | null;
+  import_state: 'discovered' | 'imported' | 'ignored' | 'needs_review'; review_reason: string | null; website_id: string | null;
+  match_website_id: string | null; match_website: string | null; match_client_id: string | null; match_client: string | null;
+}
+export interface ApiProviderLink {
+  asset_id: string; provider: ConnectorKind; asset_kind: 'zone' | 'account' | 'domain'; name: string;
+  facts: Record<string, any> | null; private_access: boolean; last_seen_at: string; stale: boolean; stale_reason: string | null;
+}

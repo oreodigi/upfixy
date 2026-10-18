@@ -1,4 +1,5 @@
 import { RepairControls } from './pages/Repairs';
+import { Integration, Integrations } from './pages/Integrations';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, session, type ApiClient, type ApiMe, type ApiSite, type ApiTicket, type ApiWorkspace } from './api';
 import { Ctx, type WorkspaceCtx } from './app-context';
@@ -238,6 +239,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const secondary: NavItem[] = [
     { to: '/alerts', label: unread ? `Alerts (${unread})` : 'Alerts', match: ['alerts'], icon: '🔔' },
     ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
+    ...(['owner', 'admin'].includes(role) ? [{ to: '/integrations', label: 'Integrations', match: ['integrations', 'integration'] as Route['name'][], icon: '⇄' }] : []),
     { to: '/settings', label: 'Settings', match: ['settings'], icon: '⚙' },
   ];
   const isOn = (n: NavItem) => n.match.includes(route.name);
@@ -266,7 +268,8 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const r = route;
   const blocked = (r.name === 'clients' || r.name === 'client') && !isAgency
     || r.name === 'team' && !canManageTeam
-    || r.name === 'work' && role === 'billing';
+    || r.name === 'work' && role === 'billing'
+    || (r.name === 'integrations' || r.name === 'integration') && !['owner', 'admin'].includes(role);
 
   return (
     <Ctx.Provider value={ctx}>
@@ -298,6 +301,8 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
             : r.name === 'alerts' ? <Alerts onRead={loadUnread} />
             : r.name === 'diagnostic' ? <Diagnosis id={r.id} />
+            : r.name === 'integrations' ? <Integrations />
+            : r.name === 'integration' ? <Integration id={r.id} />
             : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /><RepairControls /></div> : null)
             : null}
         </main>
