@@ -11,6 +11,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -74,6 +75,44 @@ class AuthController
 
         Audit::record('user.login', 'allowed', 'user', $user->id);
         return response()->json(['mfa_required' => false, 'token' => Tokens::issue($user)]);
+    }
+
+    /**
+     * Forgotten password. Same answer whether or not the account exists (no enumeration); at most
+     * 3 links per hour per account; only the newest link works; only its SHA-256 is stored.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email', 'max:254']]);
+        $token = bin2hex(random_bytes(32));
+        $minutes = (int) config('upfixy.password_reset_minutes', 30);
+        $uid = DB::selectOne('SELECT issue_password_reset(?, ?, ?) AS u', [$data['email'], hash('sha256', $token), $minutes])->u;
+        if ($uid) {
+            Mail::to($data['email'])->send(new \App\Mail\SecurityNoticeMail('reset', [
+                'link' => config('upfixy.frontend_url') . '/reset-password?token=' . $token, 'minutes' => $minutes]));
+            TenantContext::apply($uid, null);
+            Audit::record('user.password_reset_requested', 'allowed', 'user', $uid);
+            TenantContext::apply(null, null);
+        }
+        return response()->json(['message' => 'If an account uses this email, we sent a link to reset the password.'], 202);
+    }
+
+    /** One-time link + new password. Signs the account out everywhere; MFA is still required at the next sign-in. */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string', 'size:64', 'regex:/^[0-9a-f]{64}$/'],
+            'password' => ['required', 'confirmed', Password::min(12)],
+        ]);
+        $uid = DB::selectOne('SELECT consume_password_reset(?, ?) AS u', [hash('sha256', $data['token']), Hash::make($data['password'])])->u;
+        if (!$uid) {
+            return response()->json(['message' => 'This link has expired or was already used. Ask for a new one.'], 422);
+        }
+        TenantContext::apply($uid, null);
+        Audit::record('user.password_reset', 'allowed', 'user', $uid);
+        $email = DB::selectOne('SELECT user_email(?) AS e', [$uid])->e;
+        Mail::to($email)->send(new \App\Mail\SecurityNoticeMail('changed', ['at' => now()->utc()->format('Y-m-d H:i')]));
+        return response()->json(['message' => 'Your password was changed. Sign in with the new password.']);
     }
 
     /** Email link target. No session needed: the link itself is the credential. */

@@ -1,6 +1,7 @@
 import { RepairControls } from './pages/Repairs';
 import { Integration, Integrations } from './pages/Integrations';
 import Billing from './pages/Billing';
+import { ClosedWorkspace, CloseWorkspace } from './pages/WorkspaceClose';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, session, type ApiClient, type ApiMe, type ApiSite, type ApiTicket, type ApiWorkspace } from './api';
 import { Ctx, type WorkspaceCtx } from './app-context';
@@ -23,8 +24,9 @@ const store = {
 };
 
 /** Email links land on /verify-email or /accept-invite with ?token=… */
-function linkFromUrl(): { kind: 'verify' | 'invite'; token: string } | null {
+function linkFromUrl(): { kind: 'verify' | 'invite' | 'reset'; token: string } | null {
   const token = new URLSearchParams(window.location.search).get('token');
+  if (token && window.location.pathname === '/reset-password') return { kind: 'reset', token };
   if (token && window.location.pathname === '/verify-email') return { kind: 'verify', token };
   if (token && window.location.pathname === '/accept-invite') return { kind: 'invite', token };
   return null;
@@ -47,6 +49,7 @@ export default function LiveApp() {
   };
 
   if (link?.kind === 'verify') return <LinkLanding kind="verify" token={link.token} signedIn={!!token} onDone={leaveLink} />;
+  if (link?.kind === 'reset') return <ResetPassword token={link.token} onDone={() => leaveLink()} />;
   if (!token) {
     return <AuthScreen invited={!!pendingInvite} onSignedIn={(t, ws) => { session.setWorkspaces(null); session.setToken(t); session.setWorkspace(ws); setToken(t); }} />;
   }
@@ -57,8 +60,38 @@ export default function LiveApp() {
   }} />;
 }
 
+function ResetPassword({ token, onDone }: { token: string; onDone: () => void }) {
+  const [pw, setPw] = useState({ password: '', password_confirmation: '' });
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="auth">
+      <form className="auth__card" onSubmit={(e) => {
+        e.preventDefault(); setBusy(true);
+        void api<{ message: string }>('POST', 'auth/reset-password', { token, ...pw }, { workspace: false })
+          .then((r) => setMsg({ ok: true, text: r.message })).catch((err) => setMsg({ ok: false, text: err instanceof ApiError ? err.message : String(err) }))
+          .finally(() => setBusy(false));
+      }}>
+        <span className="logo" aria-hidden="true">U</span>
+        <h1>Choose a new password</h1>
+        {msg?.ok ? <p className="ok" role="status">{msg.text}</p> : (<>
+          <p>At least 12 characters. You'll be signed out of every device. If you use two-step verification, you'll still need your code.</p>
+          <label className="field">New password<input type="password" autoComplete="new-password" required minLength={12} value={pw.password}
+            onChange={(e) => setPw({ ...pw, password: e.target.value })} /></label>
+          <label className="field">Repeat new password<input type="password" autoComplete="new-password" required minLength={12} value={pw.password_confirmation}
+            onChange={(e) => setPw({ ...pw, password_confirmation: e.target.value })} /></label>
+          {msg && <p className="error" role="alert">{msg.text}</p>}
+          <button className="btn" disabled={busy}>Change password</button>
+        </>)}
+        <button type="button" className="link" onClick={onDone}>Go to sign in</button>
+      </form>
+    </div>
+  );
+}
+
 function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: string | null) => void; invited: boolean }) {
-  const [mode, setMode] = useState<'login' | 'register'>(invited ? 'login' : 'register');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(invited ? 'login' : 'register');
+  const [sent, setSent] = useState<string | null>(null);
   const [form, setForm] = useState({ email: '', password: '', account_type: 'solo', workspace_name: '' });
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -75,6 +108,9 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
         session.setToken(challenge);
         const r = await api<{ token: string }>('POST', 'auth/mfa/login', { code }, { workspace: false });
         onSignedIn(r.token, null);
+      } else if (mode === 'forgot') {
+        const r = await api<{ message: string }>('POST', 'auth/forgot-password', { email: form.email }, { workspace: false });
+        setSent(r.message);
       } else if (mode === 'register') {
         const r = await api<{ token: string; workspace_id: string }>('POST', 'auth/register', form, { workspace: false });
         onSignedIn(r.token, r.workspace_id);
@@ -107,7 +143,9 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
           </>
         ) : (
           <>
-            <h1>{mode === 'register' ? 'Create your Upfixy account' : 'Sign in to Upfixy'}</h1>
+            <h1>{mode === 'register' ? 'Create your Upfixy account' : mode === 'forgot' ? 'Reset your password' : 'Sign in to Upfixy'}</h1>
+            {mode === 'forgot' && <p>Enter your account email. If it has an Upfixy account, we'll send a link that works once and expires in 30 minutes.</p>}
+            {sent && <p className="ok" role="status">{sent}</p>}
             {invited && <p className="ok">Sign in or create an account with the invited email address to join the workspace.</p>}
             {mode === 'register' && (
               <fieldset className="choice">
@@ -117,9 +155,11 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
               </fieldset>
             )}
             <label className="field">Email<input type="email" autoComplete="email" required value={form.email} onChange={set('email')} /></label>
-            <label className="field">Password
-              <input type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} required minLength={mode === 'register' ? 12 : 1} value={form.password} onChange={set('password')} />
-            </label>
+            {mode !== 'forgot' && (
+              <label className="field">Password
+                <input type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} required minLength={mode === 'register' ? 12 : 1} value={form.password} onChange={set('password')} />
+              </label>
+            )}
             {mode === 'register' && (
               <label className="field">{form.account_type === 'agency' ? 'Agency name' : 'Workspace name'}
                 <input required maxLength={120} value={form.workspace_name} onChange={set('workspace_name')} />
@@ -128,11 +168,14 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
           </>
         )}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn" disabled={busy}>{challenge ? 'Verify and sign in' : mode === 'register' ? 'Create account' : 'Sign in'}</button>
+        <button className="btn" disabled={busy}>{challenge ? 'Verify and sign in' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}</button>
         {!challenge && (
-          <button type="button" className="link" onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); setError(null); }}>
-            {mode === 'register' ? 'I already have an account' : 'Create a new account'}
+          <button type="button" className="link" onClick={() => { setMode(mode === 'register' ? 'login' : mode === 'forgot' ? 'login' : 'register'); setError(null); setSent(null); }}>
+            {mode === 'register' ? 'I already have an account' : mode === 'forgot' ? 'Back to sign in' : 'Create a new account'}
           </button>
+        )}
+        {!challenge && mode === 'login' && (
+          <button type="button" className="link" onClick={() => { setMode('forgot'); setError(null); }}>Forgot your password?</button>
         )}
       </form>
     </div>
@@ -169,7 +212,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
     api<{ data: ApiWorkspace[] }>('GET', 'workspaces', undefined, { workspace: false })
       .then((r) => {
         setWorkspaces(r.data); session.setWorkspaces(r.data);
-        const pick = r.data.find((w) => w.id === ws)?.id ?? r.data[0]?.id ?? null;
+        const pick = r.data.find((w) => w.id === ws)?.id ?? r.data.find((w) => !w.closed_at)?.id ?? r.data[0]?.id ?? null;
         session.setWorkspace(pick); setWs(pick);
       })
       .catch((e) => (e instanceof ApiError && e.status === 401 ? onSignOut() : setError(e.message)));
@@ -196,6 +239,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const guard = useCallback(async (p: Promise<void>) => {
     try { await p; } catch (e) {
       if (e instanceof ApiError && e.status === 404) { session.setWorkspace(null); window.location.reload(); return; } // access removed
+      if (e instanceof ApiError && e.status === 410) return; // closed workspace: the closed notice explains
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
@@ -261,7 +305,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
         session.setWorkspace(e.target.value); setWs(e.target.value);
         navigate('/', { replace: true });
       }}>
-        {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+        {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}{w.closed_at ? ' (closed)' : ''}</option>)}
       </select>
     </label>
   ) : <p className="top__ws">{current?.name ?? 'Loading…'}</p>;
@@ -294,6 +338,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
         <main className="main" id="main" tabIndex={-1}>
           {error && <p className="error" role="alert">{error}</p>}
           {!current ? <p className="hint" role="status">Loading…</p>
+            : current.closed_at ? <ClosedWorkspace ws={current} />
             : blocked || r.name === 'not_found' ? <NotFound />
             : r.name === 'overview' ? <Overview />
             : r.name === 'clients' ? <ClientsBoard />
@@ -307,7 +352,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'integrations' ? <Integrations />
             : r.name === 'billing' ? <Billing />
             : r.name === 'integration' ? <Integration id={r.id} />
-            : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /><RepairControls /></div> : null)
+            : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /><RepairControls /><CloseWorkspace /></div> : null)
             : null}
         </main>
 

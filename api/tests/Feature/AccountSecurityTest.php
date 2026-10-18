@@ -92,9 +92,11 @@ class AccountSecurityTest extends TestCase
     {
         $u = $this->makeUser('guess');
         $this->enableMfa($u);
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $this->api($u, null, 'POST', 'mfa/verify', ['code' => '000000'])->assertStatus(422);
         }
+        // The 5th wrong code locks the account's code entry (SecurityHardeningTest); the 6/min limiter is the outer bound.
+        $this->api($u, null, 'POST', 'mfa/verify', ['code' => '000000'])->assertStatus(429);
         $this->api($u, null, 'POST', 'mfa/verify', ['code' => '000000'])->assertStatus(429);
         // A different endpoint has its own budget, so one can't lock the user out of everything.
         $this->api($u, null, 'GET', 'auth/me')->assertOk();

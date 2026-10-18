@@ -40,8 +40,11 @@ class WithTenantContext
             if ($tokenId = $request->user()?->currentAccessToken()?->getKey()) {
                 DB::update('UPDATE personal_access_tokens SET last_used_at = now() WHERE id = ?', [$tokenId]);
             }
+            $closed = ($ws !== null && TenantContext::role() === null) ? DB::selectOne('SELECT workspace_closed_at(?) AS c', [$ws])?->c : null;
             $response = ($ws !== null && TenantContext::role() === null)
-                ? response()->json(['message' => 'Workspace not found.'], 404)
+                ? ($closed
+                    ? response()->json(['code' => 'workspace_closed', 'closed_at' => $closed, 'message' => 'This workspace was closed. Its owner can reopen it within 30 days.'], 410)
+                    : response()->json(['message' => 'Workspace not found.'], 404))
                 : $next($request);
 
             if ($response->getStatusCode() >= 400) {

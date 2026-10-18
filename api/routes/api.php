@@ -38,6 +38,10 @@ Route::prefix('v1')->middleware('tenant')->group(function () {
         Route::post('auth/login', [AuthController::class, 'login']);
         Route::post('auth/verify-email', [AuthController::class, 'verifyEmail']);
     });
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('auth/reset-password', [AuthController::class, 'resetPassword']);
+    });
 });
 
 // MFA challenge token only: finish signing in.
@@ -60,9 +64,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
 
     Route::get('workspaces', [WorkspaceController::class, 'index']);
     Route::post('workspaces', [WorkspaceController::class, 'store']);
+    Route::post('workspaces/{workspace}/reopen', [WorkspaceController::class, 'reopen'])->whereUuid('workspace')->middleware('mfa.fresh');
     Route::post('invitations/accept', [InvitationController::class, 'accept'])->middleware('throttle:10,1');
 
     Route::middleware('workspace')->group(function () {
+        Route::post('workspace/close', [WorkspaceController::class, 'close'])->middleware('mfa.fresh');
         Route::get('members', [MemberController::class, 'index']);
         Route::patch('members/{user}', [MemberController::class, 'update'])->whereUuid('user')->middleware('mfa.fresh');
 
