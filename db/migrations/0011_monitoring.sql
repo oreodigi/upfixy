@@ -69,7 +69,7 @@ CREATE TABLE incidents (
   UNIQUE (workspace_id, id),
   FOREIGN KEY (workspace_id, website_id) REFERENCES websites(workspace_id, id) ON DELETE CASCADE,
   FOREIGN KEY (workspace_id, monitor_target_id) REFERENCES monitor_targets(workspace_id, id) ON DELETE CASCADE,
-  FOREIGN KEY (workspace_id, acknowledged_by) REFERENCES memberships(workspace_id, user_id),
+  FOREIGN KEY (workspace_id, acknowledged_by) REFERENCES memberships(workspace_id, user_id) DEFERRABLE INITIALLY DEFERRED,
   CHECK ((status = 'resolved') = (resolved_at IS NOT NULL))
 );
 CREATE UNIQUE INDEX incidents_one_open ON incidents(monitor_target_id) WHERE status = 'open';

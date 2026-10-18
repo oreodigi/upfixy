@@ -353,4 +353,13 @@ class MonitoringTest extends TestCase
         $this->api($f['olive'], $f['ws'], 'POST', 'notifications/read-all')->assertNoContent();
         $this->api($f['olive'], $f['ws'], 'GET', 'notifications')->assertJsonPath('unread', 0);
     }
+
+    public function test_a_workspace_with_acknowledged_incidents_can_be_removed(): void // NFR-14
+    {
+        $id = $this->openIncident();
+        $this->api($this->f['olive'], $this->f['ws'], 'POST', "incidents/{$id}/acknowledge")->assertOk();
+        $this->owner()->delete('DELETE FROM workspaces WHERE id = ?', [$this->f['ws']]);
+        $this->assertSame(0, $this->owner()->table('incidents')->count());
+        $this->assertSame(1, $this->owner()->table('workspaces')->count());
+    }
 }
