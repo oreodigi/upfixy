@@ -615,3 +615,22 @@ describe('M1 audit fixes', () => {
     await expect(as(id.olive, id.wsA, (c) => c.query('DELETE FROM tickets'))).rejects.toThrow(/permission denied/);
   });
 });
+
+describe('workspace removal (NFR-14)', () => {
+  it('a workspace with assigned work and pending invitations can be removed in one statement', async () => {
+    await owner.query('UPDATE tickets SET assignee_id = $1, version = version + 1 WHERE id = $2', [id.tina, id.ticket]);
+    await owner.query("INSERT INTO invitations(workspace_id, email, role, token_hash, invited_by, expires_at) VALUES ($1, 'x@test.local', 'technician', $2, $3, now() + interval '1 day')",
+      [id.wsA, sha(token()), id.adam]);
+    await owner.query('DELETE FROM workspaces WHERE id = $1', [id.wsA]);
+    expect((await one(owner, 'SELECT count(*)::int AS n FROM tickets')).n).toBe(0);
+    expect((await one(owner, 'SELECT count(*)::int AS n FROM workspaces WHERE id = $1', [id.wsB])).n).toBe(1);
+  });
+
+  it('commercial records block hard deletion: closure must be a retention-aware soft close (open decision D-12)', async () => {
+    await moveTicket('investigating');
+    await issueQuote();
+    // Blocked either by the quote's immutable target reference or by the append-only quote itself.
+    await expect(owner.query('DELETE FROM workspaces WHERE id = $1', [id.wsA])).rejects.toThrow(/append-only|violates foreign key/);
+    expect((await one(owner, 'SELECT count(*)::int AS n FROM quotes')).n).toBe(1);
+  });
+});
