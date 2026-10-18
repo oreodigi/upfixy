@@ -6,20 +6,32 @@ Website diagnostics and resolution SaaS for solo owners, agencies and hosting pr
 
 Requirements: [Upfixy MVP FRD v0.3](docs/FRD.md) (M1 was built against v0.2.1; v0.3 adds AI diagnostics and controlled DNS repairs in M5 and M7). Nothing here is deployed or connected to any real server, provider account or payment gateway. This repo is independent of Gods Eye: it has its own database, roles and code, and holds no credentials.
 
+## Documentation
+
+| Doc | What it answers |
+| --- | --- |
+| [FRD v0.3](docs/FRD.md) | What the product must do (founder-approved scope) |
+| [Implementation status](docs/IMPLEMENTATION_STATUS.md) | What is built per milestone, traceability FRD → code → tests → PR, and where the code differs from the FRD |
+| [Architecture](docs/ARCHITECTURE.md) | Processes, database roles, isolation and key decisions |
+| [Security](docs/SECURITY.md) | Controls, review findings S-01…S-08 and known gaps |
+| [AI diagnostics](docs/AI_DIAGNOSTICS.md) | Evidence → rules → AI contract, validator and fallback |
+| [Repair engine](docs/REPAIR_ENGINE.md) | Allowlisted Cloudflare DNS fix: gates, controls, release checklist |
+| [Test results](docs/TEST_RESULTS.md) | Latest exact results and what is not yet tested |
+
 ## What's here
 
 | Path | What it is | Tests |
 | --- | --- | --- |
-| `db/migrations/` | PostgreSQL 16 schema, the single source of truth: tenancy, websites, ownership proof, delegations, tickets, quotes, approvals, invitations, audit and **row-level security** on every tenant table | 75 (as the app and worker roles) |
-| `db/bootstrap/roles.sql` | Creates the three database roles with least privilege (run once per environment) | |
-| `api/` | Laravel 12 API: auth with MFA, email verification, invitations, team, clients, websites, ownership verification, boards, tickets, quotes, approvals | 118 |
-| `packages/core/` | Shared rules in TypeScript: URL/SSRF guard, health and client roll-up, incident debounce, ticket state machine | 169 |
+| `db/migrations/` | PostgreSQL 16 schema, the single source of truth: tenancy, websites, ownership proof, delegations, tickets, quotes, approvals, invitations, audit and **row-level security** on every tenant table | 82 (as the runtime roles) |
+| `db/bootstrap/roles.sql` | Creates the four database roles with least privilege: owner (migrations), app (API), worker (monitor), executor (repairs) | |
+| `api/` | Laravel 12 API: auth with MFA, invitations, team, clients, websites, ownership proof, boards, tickets, quotes, approvals; monitor worker (`upfixy:monitor`), diagnostics with optional AI, repair executor (`upfixy:repairs`) | 234 |
+| `packages/core/` | Shared rules in TypeScript: URL/SSRF guard, health and client roll-up, incident debounce, ticket state machine, 46-guide issue library | 180 |
 | `packages/core/vectors/` | JSON test cases that **both** the TypeScript and PHP implementations must pass | (used by both) |
-| `web/` | React + TypeScript (Vite): real URLs for every screen; overview, client and website boards with search, lane filters and saved views, client detail, website detail (8 tabs, reading history), work queue (drag or keyboard), assignment, sign-in with MFA, team, ownership proof, quotes. Add `?demo` for the synthetic demo board | 22 |
+| `web/` | React + TypeScript (Vite): real URLs for every screen; overview, client and website boards with search, lane filters and saved views, client detail, website detail (8 tabs, reading history), work queue (drag or keyboard), assignment, sign-in with MFA, team, ownership proof, quotes. Add `?demo` for the synthetic demo board | 23 |
 | `scripts/e2e.py` | 38 end-to-end checks against the running servers | |
 | `scripts/seed-dev.mjs` | Dev-only demo data (refuses non-local databases). `--sites 200` adds a load-test workspace | |
-| `scripts/screens.mjs` | Screenshots at 390 px and 1440 px, page-overflow check and axe WCAG 2.1 AA audit; exits 1 on serious findings | 16 screens × 2 |
-| `scripts/keyboard.mjs` | Keyboard-only checks: skip link, navigation, moving and opening requests, dialogs, filters, Back button, deep links | 22 |
+| `scripts/screens.mjs` | Screenshots at 320, 390 and 1440 px, page-overflow check and axe WCAG 2.1 AA audit; exits 1 on serious findings | 22 screens × 3 |
+| `scripts/keyboard.mjs` | Keyboard-only checks: skip link, navigation, moving and opening requests, dialogs, filters, Back button, deep links, Check now, Analyze, incidents | 31 |
 | `scripts/perf.mjs` | API median/p95 and board render time on throttled phone (Fast 4G, 4× CPU) | |
 | `.github/workflows/ci.yml` | Every suite on push and PR, with a throwaway PostgreSQL | |
 
@@ -128,13 +140,12 @@ The database enforces, independent of the API code:
 
 ## Known gaps (next steps)
 
-- **Monitoring worker (M3).** Nothing produces observations yet, so new sites show *Needs setup*. The worker must call `isBlockedAddress()` on every resolved IP and redirect hop, as the ownership checker already does.
-- **DNS resolver.** Ownership DNS checks use the OS resolver. M3 replaces it with multiple independent resolvers.
-- **Payments (M6).** `payment_verified` has no writer yet, so paid quotes can be approved but never started.
-- **Password reset** and email change aren't built. Both need the same one-time-token pattern as email verification.
-- **MFA lockout.** Code guessing is rate-limited (6 per minute per endpoint) and challenge tokens expire after 5 minutes, but there's no account lockout or alerting yet.
-- **RLS scope.** Row-level security protects against application bugs. It can't stop arbitrary SQL run as `upfixy_app`, which could set its own context. Parameterised queries are the control for that.
-- **Connectors (M4)** need pilot test accounts; delegation grants come with them.
-- **Large boards.** With 200 websites the Websites board renders in about 2.2 s on a throttled phone (production build). Beyond a few hundred, virtualise the lanes.
-- **Client self-service add.** The database already lets a client owner add websites when the agency enables it (D-09); the web app doesn't show the button to them yet.
-- **Real-device check.** Screens are verified in headless Chromium at phone and desktop widths. Test on a real phone with a screen reader before pilot.
+Full list with risks: [Implementation status](docs/IMPLEMENTATION_STATUS.md) and [Security](docs/SECURITY.md).
+
+- **Not merged.** PRs #1 → #5 are stacked and await founder review; nothing is on `main` beyond the FRD.
+- **M4 connectors** (WHM reseller, cPanel, Cloudflare read-only) need pilot test accounts.
+- **M6 payments.** `payment_verified` has no writer, so paid quotes and automated repairs cannot run outside tests.
+- **AI is off** until a model, region, retention and budget are chosen (FRD §25.8).
+- **Repairs are off** (platform flag off, global switch paused) and untested against a real Cloudflare zone.
+- **Password reset, MFA lockout, audit hash chain, workspace soft close** are not built.
+- **Real-device and screen-reader check** before pilot.

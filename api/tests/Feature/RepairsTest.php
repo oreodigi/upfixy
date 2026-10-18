@@ -265,6 +265,33 @@ class RepairsTest extends TestCase
         $this->api($this->f['bob'], $this->f['wsB'], 'POST', "approvals/{$a['approval']}/repairs", ['idempotency_key' => 'bob-key-0001'], mfaFresh: true)->assertNotFound();
     }
 
+    public function test_privileged_repair_steps_need_fresh_mfa(): void // ACC-002, §25.4 step 1
+    {
+        $a = $this->approved();
+        $stale = fn (string $m, string $uri, array $d = []) => $this->api($this->f['tina'], $this->f['ws'], $m, $uri, $d)
+            ->assertStatus(403)->assertJson(['code' => 'mfa_step_up_required']);
+        $stale('POST', "approvals/{$a['approval']}/repairs", ['idempotency_key' => 'no-mfa-key-0001']);
+        $stale('POST', "tickets/{$this->f['ticket']}/repair-drafts", ['connection_id' => $a['conn'], 'monitor_target_id' => $this->f['target'],
+            'record_id' => self::REC, 'proposed_content' => self::NEW]);
+        $this->api($this->f['olive'], $this->f['ws'], 'POST', "dns-connections/{$a['conn']}/revoke")->assertStatus(403);
+        $this->assertSame(0, $this->owner()->table('repair_attempts')->count());
+        $this->assertNull($this->owner()->selectOne('SELECT revoked_at FROM dns_connections WHERE id = ?', [$a['conn']])->revoked_at);
+    }
+
+    public function test_zero_rupee_automated_repairs_cannot_run_before_coverage_exists(): void // C-2, AC-FIX-003.4
+    {
+        $a = $this->approved(paid: false);
+        // Even if a ₹0 automated quote existed, the executor needs verified payment or proven coverage; neither exists.
+        $this->owner()->statement('ALTER TABLE quotes DISABLE TRIGGER USER');
+        $this->owner()->update('UPDATE quotes SET amount_paise = 0 WHERE id = ?', [$a['quote']]);
+        $this->owner()->statement('ALTER TABLE quotes ENABLE TRIGGER USER');
+        $this->owner()->update('UPDATE approvals SET amount_paise = 0 WHERE id = ?', [$a['approval']]);
+        $id = $this->request($a['approval'])->assertStatus(202)->json('id');
+        $this->runExecutor();
+        $this->assertSame('refused', $this->attempt($id)->state);
+        $this->assertSame([], $this->cf->writes());
+    }
+
     public function test_expired_approval_is_refused(): void // AC-FIX-003.4
     {
         $a = $this->approved();
