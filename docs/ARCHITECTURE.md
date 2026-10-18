@@ -8,6 +8,8 @@ Upfixy is independent of Gods Eye: separate repository, database, roles, secrets
 | --- | --- | --- | --- |
 | API (`php artisan serve` locally) | `upfixy_app` | Auth, tenant reads and writes, quotes, approvals, diagnosis requests, AI calls (as a queued job) | Hold the repair key, read sealed DNS tokens, call Cloudflare write endpoints |
 | Monitor (`upfixy:monitor`) | `upfixy_worker` | Claims due targets, probes DNS/HTTP/TLS, appends observations, opens and resolves incidents, sends alerts | Read user or billing data, change tickets or quotes |
+| Connector worker (`upfixy:connectors`) | `upfixy_worker` (functions only) | Opens sealed read tokens, verifies scope, syncs provider assets (GET only) | Read tenant tables, reach DNS-edit tokens, write to providers |
+| Payment events (webhook route, `upfixy:payments --reconcile`) | `upfixy_worker` (functions only) | Verifies Razorpay signatures and amounts, marks payments, issues receipts | Anything else; the API role cannot call these functions |
 | Repair executor (`upfixy:repairs`) | `upfixy_executor` (5 connections, 15 s statement timeout) | Reads drafts, runs approved attempts, writes repair events, moves the linked ticket | Anything not in `0013_repairs.sql` executor grants |
 | Web (Vite, React + TS) | — | Mobile-first UI, real URLs per screen | Hold secrets; all rules are enforced server-side |
 
@@ -50,3 +52,7 @@ Details: [AI_DIAGNOSTICS.md](AI_DIAGNOSTICS.md), [REPAIR_ENGINE.md](REPAIR_ENGIN
 | A-4 | AI is advisory; rules decide confidence | FRD §25.1: AI cannot confirm a cause or authorise a change |
 | A-5 | Separate executor role and process; DNS tokens sealed to its key | A compromised API cannot change DNS or read tokens |
 | A-6 | Three independent off switches for repairs (env flag, global DB row, workspace row) | Kill switch must stop approved work too (AC-FIX-005.1) |
+| A-7 | Provider tokens sealed to the connector worker; transport is GET-only by type | Read-only is enforced by Upfixy, not trusted to the token (FRD §7) |
+| A-8 | Payment truth only from signed webhooks / server reconciliation, written by a different DB role | A browser or a compromised API session cannot mark work paid |
+| A-9 | Audit rows hash-chained under one lock, anchored outside the DB | Tamper evidence even against a DB owner |
+| A-10 | Closed workspaces have no role (`app_role()` NULL) | Every policy and check fails closed without touching each one |
