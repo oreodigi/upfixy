@@ -22,8 +22,8 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   await p.keyboard.press('Enter');
   // 2. Reach "Work" nav link by keyboard and open it.
   let found=false;
-  for (let i=0;i<80 && !found;i++){ await p.keyboard.press('Tab'); found = await p.evaluate(()=>{const a=document.activeElement; return a?.tagName==='A' && a.textContent?.trim().endsWith('Work') && getComputedStyle(a).display!=='none';}); }
-  ok(`${tag}: Work nav reachable by Tab`, found);
+  for (let i=0;i<80 && !found;i++){ await p.keyboard.press('Tab'); found = await p.evaluate(()=>{const a=document.activeElement; return a?.tagName==='A' && a.textContent?.trim().endsWith('Work queue') && getComputedStyle(a).display!=='none';}); }
+  ok(`${tag}: Work queue nav reachable by Tab`, found);
   if (found) { await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle'); }
   ok(`${tag}: Enter navigates to /work`, p.url().endsWith('/work'));
   // 3. Move a ticket with keyboard only: focus first "Move to" select, choose with arrows.
@@ -42,7 +42,7 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   // 5. Mobile More sheet.
   if (tag==='mobile') {
     await p.getByRole('button',{name:'More'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(200);
-    ok('mobile: More opens sheet with Security link', await p.getByRole('link',{name:/Security/}).isVisible());
+    ok('mobile: More opens sheet with Settings link', await p.getByRole('link',{name:/Settings/}).isVisible());
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);
     ok('mobile: Escape closes More sheet', !(await p.locator('.sheet').count()));
   }

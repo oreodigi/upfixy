@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // DEV ONLY. Board load timing for the "Load test N" workspace (seed-dev --sites N).
-// API: median/p95 of 20 calls per endpoint. UI: time until the board shows cards,
+// API: median/p95 of 20 calls per endpoint. UI: 10 cold loads per page; time until the board shows cards,
 // with Chromium throttled to a "Fast 4G" profile (9 Mbps down, 1.5 Mbps up, 60 ms RTT) and 4x CPU slowdown.
 import { createRequire } from 'node:module';
 const require = createRequire(new URL('../web/package.json', import.meta.url));
@@ -21,7 +21,7 @@ for (const ep of ['boards/websites', 'boards/clients', 'overview', 'tickets']) {
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium' });
 for (const [path, sel] of [['/websites', '.card'], ['/clients', '.card'], ['/', '.lanebar']]) {
   const t = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 10; i++) {
     const c = await b.newContext({ viewport: { width: 390, height: 844 } });
     await c.addInitScript(([tk, w]) => { localStorage.setItem('upfixy.token', tk); localStorage.setItem('upfixy.workspace', w); }, [j.token, ws.id]);
     const p = await c.newPage();
@@ -36,6 +36,6 @@ for (const [path, sel] of [['/websites', '.card'], ['/clients', '.card'], ['/', 
     await c.close();
   }
   const { median, p95 } = stats(t);
-  console.log(`UI   ${path.padEnd(16)} median ${median} ms  worst ${p95} ms  (Fast 4G, 4x CPU, phone)`);
+  console.log(`UI   ${path.padEnd(16)} median ${median} ms  p95 ${p95} ms  (Fast 4G, 4x CPU, phone)`);
 }
 await b.close();

@@ -115,7 +115,7 @@ export default function Overview() {
               {openStates.map(([s, n]) => <div key={s}><dt>{TICKET_LABELS[s]}</dt><dd>{n}</dd></div>)}
             </dl>
           ) : <p className="empty-inline">No open requests.</p>}
-          {role !== 'billing' && <a className="link" href="/work" onClick={onLinkClick}>Open the {isStaff ? 'work queue' : 'requests'}</a>}
+          {role !== 'billing' && <a className="link" href="/work" onClick={onLinkClick}>{isStaff ? 'Open the work queue' : 'Open issues'}</a>}
         </section>
       </div>
     </div>

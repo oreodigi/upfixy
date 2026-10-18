@@ -65,3 +65,11 @@ describe('filters', () => {
     expect(isFiltered({ lanes: ['critical'] })).toBe(true);
   });
 });
+
+describe('settings route', () => {
+  it('serves /settings and keeps the old /security link working', () => {
+    expect(parse('/settings')).toEqual({ name: 'settings' });
+    expect(parse('/security')).toEqual({ name: 'settings' });
+    expect(href({ name: 'settings' })).toBe('/settings');
+  });
+});

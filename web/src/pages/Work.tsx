@@ -36,7 +36,7 @@ export default function Work() {
   return (
     <div className="page">
       <div className="headline">
-        <h1>{isAgency ? 'Work queue' : 'Requests'}</h1>
+        <h1>{isAgency ? 'Work queue' : 'Issues'}</h1>
         <p className="headline__sub">Stages show where the work is, not how healthy a website is. Drag a card, or use “Move to”.</p>
       </div>
       {tickets.length === 0 && loaded ? (

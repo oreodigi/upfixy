@@ -1,6 +1,5 @@
 // M1 hardening UI: step-up, security settings, team, ownership, quotes.
 import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
 import { TICKET_LABELS } from '@upfixy/core';
 import {
   api, ApiError, rupees, setStepUpHandler,
@@ -99,6 +98,8 @@ export function SecurityPanel({ me, onChange }: { me: ApiMe; onChange: () => voi
     setError(null);
     try {
       const r = await api<{ secret: string; otpauth_url: string }>('POST', 'mfa/setup', undefined, { workspace: false });
+      // Loaded on demand: only MFA setup needs the QR encoder.
+      const QRCode = (await import('qrcode')).default;
       setSetup({ ...r, svg: await QRCode.toString(r.otpauth_url, { type: 'svg', margin: 1, width: 180 }) });
     } catch (e) { setError(errText(e)); }
   }

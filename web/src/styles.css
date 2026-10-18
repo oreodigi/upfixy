@@ -388,3 +388,8 @@ tr.muted th, tr.muted td { color: var(--ink-2); }
 .tabbar a[aria-selected='true'] { color: var(--ink); font-weight: 800; border-bottom-color: var(--ink); }
 .panel, .page, .stack { grid-template-columns: minmax(0, 1fr); }
 .panel > *, .page > *, .stack > * { min-width: 0; }
+/* Empty live regions keep their place in the accessibility tree but take no space. */
+.filters .hint:empty, .live:empty { min-height: 0; margin: 0; }
+/* Narrow cards: the status pill drops below a long hostname instead of splitting it. */
+.card__head { flex-wrap: wrap; }
+.card__head .host, .card__head h3 { min-width: 0; flex: 1 1 12ch; }

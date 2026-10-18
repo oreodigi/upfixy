@@ -43,12 +43,12 @@ export default function LiveApp() {
 
   if (link?.kind === 'verify') return <LinkLanding kind="verify" token={link.token} signedIn={!!token} onDone={leaveLink} />;
   if (!token) {
-    return <AuthScreen invited={!!pendingInvite} onSignedIn={(t, ws) => { session.setToken(t); session.setWorkspace(ws); setToken(t); }} />;
+    return <AuthScreen invited={!!pendingInvite} onSignedIn={(t, ws) => { session.setWorkspaces(null); session.setToken(t); session.setWorkspace(ws); setToken(t); }} />;
   }
   if (pendingInvite) return <LinkLanding kind="invite" token={pendingInvite} signedIn onDone={leaveLink} />;
   return <Workspace onSignOut={() => {
     void api('POST', 'auth/logout', undefined, { workspace: false }).catch(() => undefined);
-    session.setToken(null); session.setWorkspace(null); setToken(null);
+    session.setToken(null); session.setWorkspace(null); session.setWorkspaces(null); setToken(null);
   }} />;
 }
 
@@ -138,7 +138,7 @@ type NavItem = { to: string; label: string; match: Route['name'][]; icon: string
 
 function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const route = useRoute();
-  const [workspaces, setWorkspaces] = useState<ApiWorkspace[]>([]);
+  const [workspaces, setWorkspaces] = useState<ApiWorkspace[]>(session.workspaces);
   const [me, setMe] = useState<ApiMe | null>(null);
   const [ws, setWs] = useState<string | null>(session.workspace());
   const [clients, setClients] = useState<ApiClient[]>([]);
@@ -163,30 +163,43 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
     void loadMe().catch(() => undefined);
     api<{ data: ApiWorkspace[] }>('GET', 'workspaces', undefined, { workspace: false })
       .then((r) => {
-        setWorkspaces(r.data);
+        setWorkspaces(r.data); session.setWorkspaces(r.data);
         const pick = r.data.find((w) => w.id === ws)?.id ?? r.data[0]?.id ?? null;
         session.setWorkspace(pick); setWs(pick);
       })
       .catch((e) => (e instanceof ApiError && e.status === 401 ? onSignOut() : setError(e.message)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const reload = useCallback(async () => {
-    if (!ws || !current) return;
-    setError(null);
-    try {
-      const [s, t, c] = await Promise.all([
-        api<{ data: ApiSite[] }>('GET', 'boards/websites'),
-        api<{ data: ApiTicket[] }>('GET', 'tickets'),
-        current.kind === 'agency' ? api<{ data: ApiClient[] }>('GET', 'boards/clients') : Promise.resolve({ data: [] as ApiClient[] }),
-      ]);
-      setSites(s.data); setTickets(t.data); setClients(c.data);
-      setLoaded(true);
-    } catch (e) {
+  // Board data is requested as soon as the stored workspace is known, in
+  // parallel with the workspace list (NFR-02).
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  // Requested without waiting for the workspace kind: a solo workspace simply
+  // answers with no clients, and RLS decides what any role sees.
+  const loadClients = useCallback(async () => {
+    if (!ws) return;
+    setClients((await api<{ data: ApiClient[] }>('GET', 'boards/clients')).data);
+    setClientsLoaded(true);
+  }, [ws]);
+  const loadBoards = useCallback(async () => {
+    if (!ws) return;
+    const [s, t] = await Promise.all([
+      api<{ data: ApiSite[] }>('GET', 'boards/websites'),
+      api<{ data: ApiTicket[] }>('GET', 'tickets'),
+    ]);
+    setSites(s.data); setTickets(t.data); setLoaded(true);
+  }, [ws]);
+  const guard = useCallback(async (p: Promise<void>) => {
+    try { await p; } catch (e) {
       if (e instanceof ApiError && e.status === 404) { session.setWorkspace(null); window.location.reload(); return; } // access removed
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [ws, current]);
-  useEffect(() => { void reload(); }, [reload]);
+  }, []);
+  const reload = useCallback(async () => {
+    setError(null);
+    await guard(Promise.all([loadBoards(), loadClients()]).then(() => undefined));
+  }, [guard, loadBoards, loadClients]);
+  useEffect(() => { void guard(loadBoards()); }, [guard, loadBoards]);
+  useEffect(() => { void guard(loadClients()); }, [guard, loadClients]);
 
   const openTicket = useCallback((id: string) => navigate({ name: 'work', ticket: id }), []);
   const report = useCallback(async (siteId: string, host: string) => {
@@ -200,20 +213,20 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   }, [reload, openTicket]);
 
   const ctx: WorkspaceCtx = useMemo(() => ({
-    me, workspace: current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, reload,
+    me, workspace: current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded: loaded && clientsLoaded, reload,
     openHelp: (issue, host) => setHelp({ issue, host }),
     openVerify: setVerifySite, openTicket, report: (id, host) => void report(id, host), setError,
-  }), [me, current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, reload, openTicket, report]);
+  }), [me, current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, clientsLoaded, reload, openTicket, report]);
 
   const primary: NavItem[] = [
     { to: '/', label: 'Overview', match: ['overview'], icon: '◎' },
     ...(isAgency ? [{ to: '/clients', label: 'Clients', match: ['clients', 'client'] as Route['name'][], icon: '▦' }] : []),
     { to: '/websites', label: 'Websites', match: ['websites', 'website'], icon: '◱' },
-    ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work' : 'Requests', match: ['work'] as Route['name'][], icon: '☰' }] : []),
+    ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work queue' : 'Issues', match: ['work'] as Route['name'][], icon: '☰' }] : []),
   ];
   const secondary: NavItem[] = [
     ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
-    { to: '/security', label: 'Security', match: ['security'], icon: '🔒' },
+    { to: '/settings', label: 'Settings', match: ['settings'], icon: '⚙' },
   ];
   const isOn = (n: NavItem) => n.match.includes(route.name);
   const link = (n: NavItem, cls: string) => (
@@ -228,7 +241,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
       <span className="sr-only">Workspace</span>
       <select value={ws ?? ''} onChange={(e) => {
         // Drop everything from the previous workspace before loading the next (AC-ACC-004.1).
-        setClients([]); setSites([]); setTickets([]); setLoaded(false); setVerifySite(null); setHelp(null); setMore(false);
+        setClients([]); setSites([]); setTickets([]); setLoaded(false); setClientsLoaded(false); setVerifySite(null); setHelp(null); setMore(false);
         session.setWorkspace(e.target.value); setWs(e.target.value);
         navigate('/', { replace: true });
       }}>
@@ -271,7 +284,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'website' ? <WebsiteDetail id={r.id} tab={r.tab} />
             : r.name === 'work' ? <Work />
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
-            : r.name === 'security' ? (me ? <SecurityPanel me={me} onChange={() => void loadMe()} /> : null)
+            : r.name === 'settings' ? (me ? <SecurityPanel me={me} onChange={() => void loadMe()} /> : null)
             : null}
         </main>
 

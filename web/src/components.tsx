@@ -159,21 +159,32 @@ export function LaneChips({ counts, selected, onChange }: {
   );
 }
 
+/** Cards rendered per lane before "Show all": keeps a 200-card board fast on phones (NFR-02). */
+export const LANE_PAGE = 8;
+
 /** Health lanes: computed by monitoring, never draggable (AC-BRD-001.2). */
 export function HealthBoard<T extends { lane: HealthLane; id: string }>({ items, render, noun, lanes }: {
   items: T[]; render: (t: T) => React.ReactNode; noun: string; lanes?: HealthLane[];
 }) {
+  const [open, setOpen] = useState<Partial<Record<HealthLane, boolean>>>({});
   const shown = lanes?.length ? LANES.filter((l) => lanes.includes(l)) : LANES;
   return (
     <div className="board" role="list" aria-label={`${noun} by health`}>
       {shown.map((lane) => {
         const inLane = items.filter((i) => i.lane === lane);
+        const visible = open[lane] ? inLane : inLane.slice(0, LANE_PAGE);
+        const hidden = inLane.length - visible.length;
         return (
           <section key={lane} className={`lane lane--${lane} ${inLane.length ? '' : 'lane--empty'}`} role="listitem" aria-label={`${LANE_LABEL[lane]}: ${inLane.length}`}>
             <h2 className="lane__title"><StatusPill lane={lane} /><span className="count">{inLane.length}</span></h2>
             <div className="lane__body">
-              {inLane.length ? inLane.map((i) => <div key={i.id}>{render(i)}</div>)
+              {inLane.length ? visible.map((i) => <div key={i.id}>{render(i)}</div>)
                 : <p className="lane__none">No {noun.toLowerCase()} here.</p>}
+              {hidden > 0 && (
+                <button type="button" className="btn btn--quiet lane__more" onClick={() => setOpen({ ...open, [lane]: true })}>
+                  Show all {inLane.length} {LANE_LABEL[lane].toLowerCase()}
+                </button>
+              )}
             </div>
           </section>
         );

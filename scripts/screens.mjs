@@ -27,7 +27,8 @@ async function login(email) {
   return { token: j.token, workspaces: ws.data };
 }
 
-const VIEWPORTS = { mobile: { width: 390, height: 844 }, desktop: { width: 1440, height: 900 } };
+// 320 px is the narrowest supported width (NFR-23).
+const VIEWPORTS = { narrow: { width: 320, height: 640 }, mobile: { width: 390, height: 844 }, desktop: { width: 1440, height: 900 } };
 
 // [name, user, workspace name, steps]
 const SCREENS = [
@@ -42,7 +43,7 @@ const SCREENS = [
   ['agency-work', 'owner', 'Demo Agency', [{ goto: '/work' }]],
   ['agency-ticket', 'owner', 'Demo Agency', [{ goto: '/work' }, { text: 'Renew SSL certificate', nth: 0 }]],
   ['agency-team', 'owner', 'Demo Agency', [{ goto: '/team' }]],
-  ['security', 'owner', 'Demo Agency', [{ goto: '/security' }]],
+  ['settings', 'owner', 'Demo Agency', [{ goto: '/settings' }]],
   ['technician-overview', 'tech', 'Demo Agency', []],
   ['solo-websites', 'owner', 'Demo Solo', [{ goto: '/websites' }]],
   ['client-owner-websites', 'client', 'Demo Agency', [{ goto: '/websites' }]],

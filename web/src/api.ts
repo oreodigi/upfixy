@@ -74,6 +74,10 @@ export const session = {
   workspace: () => store.get('upfixy.workspace'),
   setToken: (t: string | null) => store.set('upfixy.token', t),
   setWorkspace: (w: string | null) => store.set('upfixy.workspace', w),
+  /** Last workspace list (names and roles only) so pages render before it reloads.
+   *  A UI hint, never authority: every request is re-authorised by the API. */
+  workspaces: (): ApiWorkspace[] => { try { return JSON.parse(store.get('upfixy.workspaces') ?? '[]'); } catch { return []; } },
+  setWorkspaces: (w: ApiWorkspace[] | null) => store.set('upfixy.workspaces', w ? JSON.stringify(w) : null),
 };
 
 export async function api<T>(method: string, path: string, body?: unknown, opts: { workspace?: boolean; retried?: boolean } = {}): Promise<T> {
@@ -88,7 +92,7 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    if (res.status === 401) session.setToken(null);
+    if (res.status === 401) { session.setToken(null); session.setWorkspaces(null); }
     if (res.status === 403 && json?.code === 'mfa_step_up_required' && stepUp && !opts.retried) {
       if (await stepUp()) return api<T>(method, path, body, { ...opts, retried: true });
     }
