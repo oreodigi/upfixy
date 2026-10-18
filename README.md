@@ -145,7 +145,7 @@ The database enforces, independent of the API code:
 
 Full list with risks: [Implementation status](docs/IMPLEMENTATION_STATUS.md) and [Security](docs/SECURITY.md).
 
-- **Open PRs:** #8 (M4) → #9 (M6) → #10 (hardening, AI evaluation) await founder review.
+- **Open PRs:** #8 (M4) → #10 (M6) → #11 (hardening, AI evaluation) await founder review.
 - **Real accounts needed:** pilot WHM/cPanel/Cloudflare test accounts (M4), a Razorpay sandbox (M6), an OpenAI key for the model comparison (M5), a Cloudflare test zone (M7). Nothing has been run against a real provider.
 - **Off by design:** live payments (three locks), production AI (`UPFIXY_AI_MODEL` unset), automated repairs (flag off, global switch paused).
 - **Founder decisions:** D-01, D-02, D-03, D-05, D-06, D-08, D-12, D-13, D-14, D-18, D-23, C-1…C-5, §25.8.

@@ -13,7 +13,7 @@ Requirements: [FRD v0.3](FRD.md). Updated after every completed feature. Nothing
 | Blocked | Cannot progress without a named founder decision, account or approval |
 | Founder accepted | Founder reviewed and accepted against the exit gate |
 
-`main` = `f8bd759` (M1, M2, M3, M5, M7, via #1 and #7). Open, stacked: **#8** M4 (base `main`) → **#9** M6 (base `m4-connectors`) → **#10** hardening + AI evaluation (base `m6-payments`).
+`main` = `f8bd759` (M1, M2, M3, M5, M7, via #1 and #7). Open, stacked: **#8** M4 (base `main`) → **#10** M6 (base `m4-connectors`) → **#11** hardening + AI evaluation (base `m6-payments`).
 
 ## Milestones
 
@@ -23,20 +23,20 @@ Requirements: [FRD v0.3](FRD.md). Updated after every completed feature. Nothing
 | M2 Boards and UX | Tests passed | #2, #7 (merged) | Real phone + screen reader check |
 | M3 Public monitoring | Tests passed | #7 (merged) | Staging egress and load test (D-22) |
 | M4 Read-only connectors | Tests passed (mocked providers) | #8 | **Blocked:** negative-scope tests on pilot test accounts need founder-authorised test credentials (Larihost, Peak99, SKClouds) |
-| M5 Diagnostics + AI | Tests passed (fake model); eval harness ready | #7 (merged), #10 | **Blocked:** live model comparison and §25.8 model/region/retention/budget decisions |
-| M6 Commercial support | Tests passed (scripted Razorpay, test mode only) | #9 | **Blocked:** D-05, D-06, D-08, D-13, D-14, D-18, D-23; Razorpay sandbox account |
-| M7 Controlled repairs | Tests passed (fake provider); disabled | #7 (merged), #10 | **Blocked:** test-zone run, C-1…C-5, restore drill on staging, pilot sign-off |
-| Security hardening | Tests passed | #10 | Off-host anchors, webhook service split (see SECURITY.md) |
+| M5 Diagnostics + AI | Tests passed (fake model); eval harness ready | #7 (merged), #11 | **Blocked:** live model comparison and §25.8 model/region/retention/budget decisions |
+| M6 Commercial support | Tests passed (scripted Razorpay, test mode only) | #10 | **Blocked:** D-05, D-06, D-08, D-13, D-14, D-18, D-23; Razorpay sandbox account |
+| M7 Controlled repairs | Tests passed (fake provider); disabled | #7 (merged), #11 | **Blocked:** test-zone run, C-1…C-5, restore drill on staging, pilot sign-off |
+| Security hardening | Tests passed | #11 | Off-host anchors, webhook service split (see SECURITY.md) |
 
 ## Features
 
 | FRD ID | Feature | State | ACs evidenced | Implementation | Tests | PR |
 | --- | --- | --- | --- | --- | --- | --- |
 | ACC-001/005 | Signup, verification, invitations | Tests passed | AC-ACC-001.* | `AuthController`, `InvitationController` | AccountSecurityTest, e2e | #1 |
-| ACC-002 | MFA, step-up, **lockout**, **password reset** | Tests passed | ACC-002 + S-11/S-12 | `Mfa`, 0016 | AccountSecurityTest, SecurityHardeningTest | #1, #10 |
+| ACC-002 | MFA, step-up, **lockout**, **password reset** | Tests passed | ACC-002 + S-11/S-12 | `Mfa`, 0016 | AccountSecurityTest, SecurityHardeningTest | #1, #11 |
 | ACC-003/004/006 | Workspaces, switcher, clients | Tests passed | IDOR sweep | 0001, 0004 | rls.test.mjs, CrossTenantSweepTest | #1 |
-| ACC-007 | Audit, **hash chain + anchors** | Tests passed | S-10 | 0016, `upfixy:audit` | SecurityHardeningTest | #1, #10 |
-| NFR-14 | Workspace soft close / reopen | Tests passed | — | `close_workspace()`, `WorkspaceClose.tsx` | SecurityHardeningTest | #10 |
+| ACC-007 | Audit, **hash chain + anchors** | Tests passed | S-10 | 0016, `upfixy:audit` | SecurityHardeningTest | #1, #11 |
+| NFR-14 | Workspace soft close / reopen | Tests passed | — | `close_workspace()`, `WorkspaceClose.tsx` | SecurityHardeningTest | #11 |
 | AST-001/002/003 | Add by URL, ownership proof | Tests passed | AC-AST-002.2…002.7 | 0008 | OwnershipTest | #1 |
 | AST-004 | Asset graph per website | Tests passed | AC-AST-004.1 | `website_provider_links()` | ConnectorsTest | #8 |
 | BRD-001…006 | Boards, lists, mobile, keyboard | Tests passed | AC-BRD-* | 0010, web | BoardsM2Test, screens, keyboard | #2 |
@@ -49,16 +49,16 @@ Requirements: [FRD v0.3](FRD.md). Updated after every completed feature. Nothing
 | INT-005 | Registrar | Blocked (D-03) | — | — | — | — |
 | INT-006 | Import preview, selective import | Tests passed | AC-INT-006.1, .2 | `ConnectorController::import` | ConnectorsTest | #8 |
 | DX-001…004 | Diagnosis, rules, report | Tests passed | AC-DX-* | 0012 | DiagnosticsTest | #7 |
-| DX-005/006 | AI analysis, gateway, **eval harness** | Tests passed (fake model); off | AC-DX-005.1–5, 006.1–2 | `Diagnostics/Ai`, `Diagnostics/Eval` | DiagnosticsTest, OpenAiClientTest, AiEvalTest | #7, #10 |
+| DX-005/006 | AI analysis, gateway, **eval harness** | Tests passed (fake model); off | AC-DX-005.1–5, 006.1–2 | `Diagnostics/Ai`, `Diagnostics/Eval` | DiagnosticsTest, OpenAiClientTest, AiEvalTest | #7, #11 |
 | SVC-001 | Tickets | Tests passed | AC-SVC-001.1 | 0003 | BoardAndTicketTest | #1 |
-| SVC-002 | Catalogue ₹0/₹100/₹200/₹300 + custom; **₹0 needs coverage** | Tests passed | AC-SVC-002.1, 003.3 | 0009, 0015 coverage | PaymentsTest, QuoteApprovalTest | #1, #9 |
+| SVC-002 | Catalogue ₹0/₹100/₹200/₹300 + custom; **₹0 needs coverage** | Tests passed | AC-SVC-002.1, 003.3 | 0009, 0015 coverage | PaymentsTest, QuoteApprovalTest | #1, #10 |
 | SVC-003 | Exact-resource approvals | Tests passed | AC-SVC-003.1–.4 | 0009 | QuoteApprovalTest | #1 |
-| SVC-004 | Razorpay checkout + webhooks + reconciliation | Tests passed (scripted, test mode) | AC-SVC-004.1–.3 | 0015, `app/Payments`, webhook | PaymentsTest | #9 |
-| SVC-005 | Receipts and refunds (**not GST invoices**) | Implemented | AC-SVC-005.1 partly (GST blocked by D-14) | `payment_receipts`, `refunds` | PaymentsTest | #9 |
+| SVC-004 | Razorpay checkout + webhooks + reconciliation | Tests passed (scripted, test mode) | AC-SVC-004.1–.3 | 0015, `app/Payments`, webhook | PaymentsTest | #10 |
+| SVC-005 | Receipts and refunds (**not GST invoices**) | Implemented | AC-SVC-005.1 partly (GST blocked by D-14) | `payment_receipts`, `refunds` | PaymentsTest | #10 |
 | SVC-006 | Subscriptions | Not started (P1) | — | — | — | — |
 | FIX-001/002 | Technician fix, verification | Implemented | — | Ticket stages, recheck | MonitoringTest | #7 |
-| FIX-003…005 | Automated DNS fix | Tests passed (fake provider); disabled | AC-FIX-003.2–5, 004.1–4, 005.1–4 | 0013, `Repairs` | RepairsTest, RepairPolicyTest | #7, #10 |
-| NFR backup | Encrypted backup + restore drill | Tests passed (local drill) | — | `ops/` | restore-drill log | #10 |
+| FIX-003…005 | Automated DNS fix | Tests passed (fake provider); disabled | AC-FIX-003.2–5, 004.1–4, 005.1–4 | 0013, `Repairs` | RepairsTest, RepairPolicyTest | #7, #11 |
+| NFR backup | Encrypted backup + restore drill | Tests passed (local drill) | — | `ops/` | restore-drill log | #11 |
 
 Details: [Architecture](ARCHITECTURE.md), [AI diagnostics](AI_DIAGNOSTICS.md), [AI model evaluation](AI_MODEL_EVALUATION.md), [Repair engine](REPAIR_ENGINE.md), [Payments](PAYMENTS.md), [Security](SECURITY.md), [Backup](BACKUP_RECOVERY.md), [Test results](TEST_RESULTS.md).
 
