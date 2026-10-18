@@ -129,6 +129,20 @@ return [
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
+        // Repair executor (M7): the only process that holds the credential-opening key.
+        'pgsql_executor' => [
+            'driver' => 'pgsql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'upfixy_dev'),
+            'username' => env('DB_EXECUTOR_USERNAME', 'upfixy_executor'),
+            'password' => env('DB_EXECUTOR_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
 
         'sqlsrv' => [
             'driver' => 'sqlsrv',

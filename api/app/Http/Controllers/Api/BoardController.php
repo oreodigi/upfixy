@@ -3,86 +3,97 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Health;
-use Carbon\CarbonImmutable;
+use App\Domain\SiteStatus;
+use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 /**
- * BRD-001/002: health boards. Lanes are computed here (server is the
- * authority, §15.2); they are never stored and never set by a user action.
+ * BRD-001/002, SCR-02/06: health boards, overview and client detail.
+ * Lanes are computed on the server (§15.2); never stored, never set by a user.
  */
 class BoardController
 {
     public function websites(): JsonResponse
     {
-        return response()->json(['data' => $this->siteRows()]);
+        return response()->json(['data' => SiteStatus::rows()]);
     }
 
     public function clients(): JsonResponse
     {
-        $sites = collect($this->siteRows());
+        $sites = collect(SiteStatus::rows());
+        $staff = $this->staffByClient();
         $clients = DB::select('SELECT id, name FROM clients ORDER BY name');
-        $data = array_map(function ($c) use ($sites) {
-            $own = $sites->where('client_id', $c->id)->values();
-            return [
-                'id' => $c->id,
-                'name' => $c->name,
-                'lane' => Health::rollUp($own->pluck('lane')->all()),
-                'website_count' => $own->count(),
-                'impacted_count' => $own->where('lane', '!=', 'healthy')->count(),
-                'last_verified_at' => $own->every(fn ($s) => $s['last_verified_at'] !== null)
-                    ? $own->min('last_verified_at') : null,
-                'websites' => $own->all(),
-            ];
-        }, $clients);
-        return response()->json(['data' => $data]);
+        return response()->json(['data' => array_map(fn ($c) => $this->clientRow($c, $sites, $staff), $clients)]);
     }
 
-    /** One row per visible website with its computed lane (RLS limits what is visible). */
-    private function siteRows(): array
+    /** SCR-06 client detail. */
+    public function client(string $client): JsonResponse
     {
-        $now = CarbonImmutable::now();
-        $targets = DB::select(
-            "SELECT w.id AS website_id, w.client_id, w.display_name, t.id AS target_id, t.state, t.interval_seconds
-               FROM websites w LEFT JOIN monitor_targets t ON t.website_id = w.id ORDER BY w.display_name");
-        $latest = collect(DB::select(
-            'SELECT DISTINCT ON (o.monitor_target_id, o.check_kind)
-                    o.monitor_target_id, o.check_kind::text AS kind, o.severity::text AS severity, o.observed_at, o.result_code
-               FROM observations o
-              ORDER BY o.monitor_target_id, o.check_kind, o.observed_at DESC'))->groupBy('monitor_target_id');
+        $c = DB::selectOne('SELECT id, name, agency_may_pay, client_self_service, created_at FROM clients WHERE id = ?', [$client]);
+        if (!$c) abort(404);
+        $row = $this->clientRow($c, collect(SiteStatus::rows()), $this->staffByClient());
+        $row['agency_may_pay'] = $c->agency_may_pay;
+        $row['client_self_service'] = $c->client_self_service;
+        $row['client_users'] = DB::select(
+            "SELECT a.user_id, u.email, m.role FROM client_assignments a
+               JOIN memberships m ON m.workspace_id = a.workspace_id AND m.user_id = a.user_id AND m.suspended_at IS NULL
+               LEFT JOIN users u ON u.id = a.user_id
+              WHERE a.client_id = ? AND m.role IN ('client_owner', 'client_staff') ORDER BY m.role, u.email", [$client]);
+        return response()->json($row);
+    }
 
-        $rows = [];
-        foreach (collect($targets)->groupBy('website_id') as $websiteId => $ts) {
-            $first = $ts->first();
-            // A website's lane is the roll-up of its targets (apex and www are separate targets).
-            $targetLanes = [];
-            $checks = [];
-            $verified = [];
-            foreach ($ts as $t) {
-                if ($t->target_id === null) continue;
-                $readings = [];
-                foreach ($latest->get($t->target_id, collect()) as $o) {
-                    $at = CarbonImmutable::parse($o->observed_at);
-                    $fresh = Health::freshness($at, $t->interval_seconds, $now);
-                    $readings[] = ['kind' => $o->kind, 'severity' => $o->severity, 'freshness' => $fresh];
-                    $checks[] = ['target_id' => $t->target_id, 'kind' => $o->kind, 'severity' => $o->severity,
-                        'freshness' => $fresh, 'result_code' => $o->result_code, 'observed_at' => $at->toIso8601String()];
-                    if ($fresh === 'fresh') $verified[] = $at;
-                }
-                $targetLanes[] = Health::site($t->state === 'active', $readings)['lane'];
-            }
-            $lane = Health::rollUp($targetLanes);
-            $rows[] = [
-                'id' => $websiteId,
-                'client_id' => $first->client_id,
-                'display_name' => $first->display_name,
-                'lane' => $lane,
-                'last_verified_at' => $verified ? collect($verified)->min()->toIso8601String() : null,
-                'checks' => $checks,
-                // Not connected is coverage, not severity (§15.2); connectors arrive in M4.
-                'coverage' => ['hosting' => 'not_connected', 'backup' => 'not_connected', 'security' => 'not_assessed'],
-            ];
+    /** SCR-02 overview: what needs attention now, across everything the caller can see. */
+    public function overview(): JsonResponse
+    {
+        $rows = SiteStatus::rows();
+        $lanes = array_fill_keys(['critical', 'warning', 'unknown', 'needs_setup', 'healthy'], 0);
+        foreach ($rows as $r) $lanes[$r['lane']]++;
+        $byState = collect(DB::select(
+            "SELECT state::text AS state, count(*)::int AS n FROM tickets WHERE state NOT IN ('closed') GROUP BY state"))->pluck('n', 'state');
+        $mine = DB::select(
+            "SELECT t.id, t.title, t.state, w.display_name AS website FROM tickets t JOIN websites w ON w.id = t.website_id
+              WHERE t.assignee_id = ? AND t.state NOT IN ('resolved', 'closed') ORDER BY t.updated_at DESC LIMIT 10",
+            [TenantContext::userId()]);
+        $awaitingDecision = DB::select(
+            "SELECT t.id, t.title, w.display_name AS website FROM tickets t JOIN websites w ON w.id = t.website_id
+              WHERE t.state = 'quote_pending' ORDER BY t.updated_at LIMIT 10");
+        return response()->json([
+            'websites' => ['total' => count($rows), 'by_lane' => $lanes],
+            'issues' => SiteStatus::issues($rows, 10),
+            'requests' => ['by_state' => $byState, 'assigned_to_me' => $mine, 'awaiting_quote_decision' => $awaitingDecision],
+        ]);
+    }
+
+    private function clientRow(object $c, $sites, array $staff): array
+    {
+        $own = $sites->where('client_id', $c->id)->values();
+        $verified = $own->pluck('last_verified_at');
+        return [
+            'id' => $c->id,
+            'name' => $c->name,
+            'lane' => Health::rollUp($own->pluck('lane')->all()),
+            'website_count' => $own->count(),
+            'impacted_count' => $own->where('lane', '!=', 'healthy')->count(),
+            'open_requests' => $own->sum('open_requests'),
+            // Only "verified" for the client when every site has a fresh reading.
+            'last_verified_at' => $own->isNotEmpty() && $verified->every(fn ($v) => $v !== null) ? $verified->min() : null,
+            'staff' => $staff[$c->id] ?? [],
+            'websites' => $own->all(),
+        ];
+    }
+
+    /** Technicians assigned per client. Emails appear only where the caller may see them (users RLS). */
+    private function staffByClient(): array
+    {
+        $out = [];
+        foreach (DB::select(
+            "SELECT a.client_id, a.user_id, u.email FROM client_assignments a
+               JOIN memberships m ON m.workspace_id = a.workspace_id AND m.user_id = a.user_id
+                                 AND m.suspended_at IS NULL AND m.role = 'technician'
+               LEFT JOIN users u ON u.id = a.user_id ORDER BY u.email") as $r) {
+            $out[$r->client_id][] = ['user_id' => $r->user_id, 'email' => $r->email];
         }
-        return $rows;
+        return $out;
     }
 }

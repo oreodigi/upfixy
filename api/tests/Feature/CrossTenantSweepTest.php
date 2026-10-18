@@ -22,7 +22,9 @@ class CrossTenantSweepTest extends TestCase
 
     /** Tables whose contents must be byte-identical before and after the sweep. */
     private const WATCHED = ['workspaces', 'memberships', 'clients', 'client_assignments', 'websites', 'monitor_targets',
-        'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users'];
+        'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
+        'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs',
+        'diagnostic_runs', 'findings', 'ai_analyses', 'dns_connections', 'repair_drafts', 'repair_attempts', 'repair_events', 'repair_controls'];
 
     protected function setUp(): void
     {
@@ -47,6 +49,61 @@ class CrossTenantSweepTest extends TestCase
         $this->enableMfa($v['alice']);
         $v['invitation'] = $this->api($v['alice'], $v['ws'], 'POST', 'invitations',
             ['email' => 'pending@test.local', 'role' => 'technician'], mfaFresh: true)->assertCreated()->json('id');
+        $v['view'] = $this->owner()->selectOne(
+            "INSERT INTO saved_views(workspace_id, user_id, board, name, filters) VALUES (?, ?, 'websites', 'Victim view', '{\"q\":\"victim\"}') RETURNING id",
+            [$v['ws'], $v['alice']->id])->id;
+        // M3: an open incident with an unread alert for the victim owner.
+        $v['incident'] = $this->owner()->selectOne(
+            "INSERT INTO incidents(workspace_id, website_id, monitor_target_id, root_kind, result_code, opened_at, first_failure_at, last_failure_at)
+             VALUES (?, ?, ?, 'http', 'HTTP_503', now(), now(), now()) RETURNING id", [$v['ws'], $v['site'], $v['target']])->id;
+        $v['notification'] = $this->owner()->selectOne(
+            "INSERT INTO notifications(workspace_id, user_id, incident_id, kind) VALUES (?, ?, ?, 'incident_opened') RETURNING id",
+            [$v['ws'], $v['alice']->id, $v['incident']])->id;
+        $this->owner()->insert('INSERT INTO notification_prefs(workspace_id, user_id, client_id, email, in_app) VALUES (?, ?, ?, false, true)',
+            [$v['ws'], $v['alice']->id, $v['client']]);
+        // M5: a finished diagnosis with a finding and an AI analysis.
+        $this->observe($v['ws'], $v['target'], 'http', 'critical', 1, 7);
+        $v['run'] = $this->owner()->selectOne(
+            "INSERT INTO diagnostic_runs(workspace_id, website_id, requested_by, status, rule_version, snapshot, snapshot_hash, private_evidence, completed_at)
+             VALUES (?, ?, ?, 'completed', 'rules-test', '{\"items\":[],\"rules\":{}}', 'h', false, now()) RETURNING id",
+            [$v['ws'], $v['site'], $v['alice']->id])->id;
+        $obs = $this->owner()->table('observations')->where('monitor_target_id', $v['target'])->value('id');
+        $this->owner()->insert("INSERT INTO findings(workspace_id, run_id, source, finding_key, observed_fact, evidence_ids, confidence)
+                                VALUES (?, ?, 'rules', 'observed:x', 'Victim work observed', ARRAY[?]::uuid[], 'confirmed')", [$v['ws'], $v['run'], $obs]);
+        $this->owner()->insert("INSERT INTO ai_analyses(workspace_id, run_id, status, provider, prompt_version, schema_version)
+                                VALUES (?, ?, 'skipped', 'none', 'p', 's')", [$v['ws'], $v['run']]);
+        // M7: a DNS connection, a ready preview, a quote from it, an approval and a finished attempt.
+        $k = \App\Repairs\SecretBox::keygen();
+        config(['upfixy.repairs.public_key' => $k['public'], 'upfixy.repairs.keypair' => $k['keypair']]);
+        $v['connection'] = $this->owner()->selectOne(
+            "INSERT INTO dns_connections(workspace_id, website_id, provider, zone_id, zone_name, secret_sealed, created_by)
+             VALUES (?, ?, 'cloudflare', ?, 'victim-secret.example', ?, ?) RETURNING id",
+            [$v['ws'], $v['site'], str_repeat('ab', 16), \App\Repairs\SecretBox::seal('victim-cf-token-secret', $k['public']), $v['alice']->id])->id;
+        $v['repair_ticket'] = $this->makeTicket($v['ws'], $v['site'], 'investigating');
+        $plan = json_encode(['operation' => 'cloudflare.dns.update_address_record', 'version' => 'repair-plan-v1', 'connection_id' => $v['connection'],
+            'zone_id' => str_repeat('ab', 16), 'record_id' => str_repeat('cd', 16), 'record_name' => 'victim-secret.example', 'record_type' => 'A',
+            'before' => ['content' => '93.184.216.34', 'ttl' => 300, 'proxied' => false], 'after' => ['content' => '93.184.216.35', 'ttl' => 300, 'proxied' => false]]);
+        $v['draft'] = $this->owner()->selectOne(
+            "INSERT INTO repair_drafts(workspace_id, ticket_id, monitor_target_id, connection_id, record_id, proposed_content, state, plan, requested_by)
+             VALUES (?, ?, ?, ?, ?, '93.184.216.35', 'ready', ?::jsonb, ?) RETURNING id",
+            [$v['ws'], $v['repair_ticket'], $v['target'], $v['connection'], str_repeat('cd', 16), $plan, $v['alice']->id])->id;
+        $rq = $this->owner()->selectOne(
+            "INSERT INTO quotes(workspace_id, ticket_id, monitor_target_id, action_code, description, amount_paise, params, issued_by, fingerprint, expires_at)
+             VALUES (?, ?, ?, 'dns.record_fix', 'Victim DNS change', 0, ?::jsonb, ?, repeat('0', 64), now() + interval '1 day') RETURNING id, fingerprint",
+            [$v['ws'], $v['repair_ticket'], $v['target'], $plan, $v['alice']->id]);
+        $this->owner()->unprepared('ALTER TABLE approvals DISABLE TRIGGER USER');
+        $v['approval'] = $this->owner()->selectOne(
+            "INSERT INTO approvals(workspace_id, ticket_id, quote_id, fingerprint, approved_by, amount_paise, action_fingerprint, expires_at, payment_verified)
+             VALUES (?, ?, ?, ?, ?, 10000, ?, now() + interval '1 day', true) RETURNING id",
+            [$v['ws'], $v['repair_ticket'], $rq->id, $rq->fingerprint, $v['alice']->id, $rq->fingerprint])->id;
+        $this->owner()->unprepared('ALTER TABLE approvals ENABLE TRIGGER USER');
+        $v['attempt'] = $this->owner()->selectOne(
+            "INSERT INTO repair_attempts(workspace_id, ticket_id, quote_id, approval_id, connection_id, connection_secret_version, zone_id, record_id, plan,
+                                         plan_fingerprint, idempotency_key, requested_by, state, customer_message)
+             VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?::jsonb, ?, 'victim-key-001', ?, 'resolved', 'Victim work done') RETURNING id",
+            [$v['ws'], $v['repair_ticket'], $rq->id, $v['approval'], $v['connection'], str_repeat('ab', 16), str_repeat('cd', 16), $plan, $rq->fingerprint, $v['alice']->id])->id;
+        $this->owner()->insert("INSERT INTO repair_events(workspace_id, attempt_id, kind, detail) VALUES (?, ?, 'write', '{\"ref\": \"victim-ray\"}')", [$v['ws'], $v['attempt']]);
+        $this->owner()->insert("INSERT INTO repair_controls(workspace_id, paused, reason) VALUES (?, true, 'Victim paused')", [$v['ws']]);
         $this->v = $v;
     }
 
@@ -66,6 +123,20 @@ class CrossTenantSweepTest extends TestCase
             'POST api/v1/tickets/{ticket}/quotes' => ['monitor_target_id' => $v['target'], 'action_code' => 'provider.covered_fix', 'description' => 'x'],
             'POST api/v1/quotes/{quote}/void' => ['reason' => 'attacker'],
             'POST api/v1/tickets/{ticket}/approvals' => ['quote_id' => $v['quote'], 'fingerprint' => $v['fingerprint']],
+            'GET api/v1/clients/{client}', 'GET api/v1/websites/{website}/history', 'GET api/v1/tickets/{ticket}/assignable' => [],
+            'PATCH api/v1/tickets/{ticket}/assignee' => ['assignee_id' => $attacker['user']->id, 'version' => 2],
+            'PATCH api/v1/views/{view}' => ['name' => 'Taken over'],
+            'DELETE api/v1/views/{view}' => [],
+            'DELETE api/v1/clients/{client}/assignments/{user}' => [],
+            'POST api/v1/websites/{website}/recheck', 'GET api/v1/incidents/{incident}', 'POST api/v1/incidents/{incident}/acknowledge',
+            'POST api/v1/notifications/{notification}/read' => [],
+            'POST api/v1/websites/{website}/diagnose', 'GET api/v1/websites/{website}/diagnostics', 'GET api/v1/diagnostics/{run}' => [],
+            'GET api/v1/websites/{website}/dns-connections', 'POST api/v1/dns-connections/{connection}/revoke', 'GET api/v1/tickets/{ticket}/repairs',
+            'GET api/v1/repair-drafts/{draft}', 'POST api/v1/repair-drafts/{draft}/quote', 'GET api/v1/repair-attempts/{attempt}' => [],
+            'POST api/v1/websites/{website}/dns-connections' => ['zone_id' => str_repeat('ef', 16), 'zone_name' => 'attacker.example', 'api_token' => 'attacker-token-00000000'],
+            'POST api/v1/dns-connections/{connection}/rotate' => ['api_token' => 'attacker-token-00000000'],
+            'POST api/v1/tickets/{ticket}/repair-drafts' => ['connection_id' => $v['connection'], 'monitor_target_id' => $v['target'], 'record_id' => str_repeat('cd', 16), 'proposed_content' => '93.184.216.36'],
+            'POST api/v1/approvals/{approval}/repairs' => ['idempotency_key' => 'attacker-key-01'],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -80,6 +151,14 @@ class CrossTenantSweepTest extends TestCase
             'ticket' => $this->v['ticket'],
             'quote' => $this->v['quote'],
             'invitation' => $this->v['invitation'],
+            'view' => $this->v['view'],
+            'incident' => $this->v['incident'],
+            'notification' => $this->v['notification'],
+            'run' => $this->v['run'],
+            'connection' => $this->v['connection'],
+            'draft' => $this->v['draft'],
+            'approval' => $this->v['approval'],
+            'attempt' => $this->v['attempt'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }
@@ -109,9 +188,10 @@ class CrossTenantSweepTest extends TestCase
     private function sweep(array $attacker, array $allowedStatuses): void
     {
         $routes = $this->idRoutes();
-        $this->assertGreaterThanOrEqual(14, count($routes), 'route discovery looks broken');
+        $this->assertGreaterThanOrEqual(20, count($routes), 'route discovery looks broken');
         $before = $this->snapshot();
-        $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'alice@test.local', 'pending@test.local', $this->v['fingerprint']];
+        $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'victim-cf-token-secret', 'victim-ray', 'Victim DNS change', 'alice@test.local', 'pending@test.local',
+            'Victim view', $this->v['fingerprint']];
 
         foreach ($routes as [$method, $uri]) {
             $path = preg_replace_callback('/\{(\w+)\}/', fn ($m) => $this->param($m[1]), substr($uri, strlen('api/v1/')));

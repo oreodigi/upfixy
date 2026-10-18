@@ -51,6 +51,15 @@ abstract class TestCase extends BaseTestCase
         $this->tokens = [];
     }
 
+    protected function tearDown(): void
+    {
+        // Close every pooled connection: roles have small connection limits (the executor allows 5).
+        foreach (array_keys(config('database.connections')) as $name) {
+            if (str_starts_with($name, 'pgsql')) DB::purge($name);
+        }
+        parent::tearDown();
+    }
+
     protected function owner()
     {
         return DB::connection('pgsql_owner');

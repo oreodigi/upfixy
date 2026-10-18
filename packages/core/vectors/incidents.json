@@ -1,0 +1,16 @@
+{
+  "_doc": "Incident debounce (MON-005, MON-008, AC-MON-005.1/.3, AC-MON-008.1). One entry per scheduled cycle; retries inside a cycle are already collapsed. Shared by packages/core and the PHP worker.",
+  "cases": [
+    { "name": "one failure then success opens nothing (AC-MON-005.1)", "outcomes": ["fail", "ok"], "open": false, "openedAtCycle": null, "resolvedAtCycle": null },
+    { "name": "two failures open nothing", "outcomes": ["fail", "fail"], "open": false, "openedAtCycle": null, "resolvedAtCycle": null },
+    { "name": "three consecutive failed cycles open (AC-MON-005.1)", "outcomes": ["fail", "fail", "fail"], "open": true, "openedAtCycle": 3, "resolvedAtCycle": null },
+    { "name": "a success in between restarts the count", "outcomes": ["fail", "fail", "ok", "fail", "fail"], "open": false, "openedAtCycle": null, "resolvedAtCycle": null },
+    { "name": "probe errors neither count nor reset", "outcomes": ["fail", "probe_error", "fail", "probe_error", "fail"], "open": true, "openedAtCycle": 5, "resolvedAtCycle": null },
+    { "name": "one success does not resolve", "outcomes": ["fail", "fail", "fail", "ok"], "open": true, "openedAtCycle": 3, "resolvedAtCycle": null },
+    { "name": "two successful cycles resolve (AC-MON-008.1)", "outcomes": ["fail", "fail", "fail", "ok", "ok"], "open": false, "openedAtCycle": 3, "resolvedAtCycle": 5 },
+    { "name": "a failure between successes delays recovery", "outcomes": ["fail", "fail", "fail", "ok", "fail", "ok", "ok"], "open": false, "openedAtCycle": 3, "resolvedAtCycle": 7 },
+    { "name": "probe errors during recovery do not count as success", "outcomes": ["fail", "fail", "fail", "ok", "probe_error", "ok"], "open": false, "openedAtCycle": 3, "resolvedAtCycle": 6 },
+    { "name": "only probe errors: nothing happens", "outcomes": ["probe_error", "probe_error", "probe_error", "probe_error"], "open": false, "openedAtCycle": null, "resolvedAtCycle": null },
+    { "name": "reopens after recovery on three new failures", "outcomes": ["fail", "fail", "fail", "ok", "ok", "fail", "fail", "fail"], "open": true, "openedAtCycle": 8, "resolvedAtCycle": null }
+  ]
+}

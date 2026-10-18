@@ -1,10 +1,10 @@
 // M1 hardening UI: step-up, security settings, team, ownership, quotes.
 import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
 import { TICKET_LABELS } from '@upfixy/core';
+import { ChangePreview, RepairPanel } from './pages/Repairs';
 import {
   api, ApiError, rupees, setStepUpHandler,
-  type ApiAction, type ApiClaim, type ApiInvitation, type ApiMe, type ApiMember, type ApiTarget, type ApiTicketDetail,
+  type ApiAction, type ApiClaim, type ApiInvitation, type ApiMe, type ApiMember, type ApiStaff, type ApiTarget, type ApiTicketDetail, type RepairPlan,
 } from './api';
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -99,6 +99,8 @@ export function SecurityPanel({ me, onChange }: { me: ApiMe; onChange: () => voi
     setError(null);
     try {
       const r = await api<{ secret: string; otpauth_url: string }>('POST', 'mfa/setup', undefined, { workspace: false });
+      // Loaded on demand: only MFA setup needs the QR encoder.
+      const QRCode = (await import('qrcode')).default;
       setSetup({ ...r, svg: await QRCode.toString(r.otpauth_url, { type: 'svg', margin: 1, width: 180 }) });
     } catch (e) { setError(errText(e)); }
   }
@@ -214,7 +216,7 @@ export function TeamPanel({ clients, myRole }: { clients: Array<{ id: string; na
         <button className="btn">Send invitation</button>
       </form>
 
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
         <table className="list">
           <thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">Sign-in</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
@@ -353,8 +355,43 @@ export function OwnershipDialog({ websiteId, name, onClose }: { websiteId: strin
 }
 
 // ---------------------------------------------------------------- tickets
-export function TicketDialog({ ticketId, role, onClose, onChanged }: {
-  ticketId: string | null; role: string; onClose: () => void; onChanged: () => void;
+/** Who works on a request. Technicians can only take or drop it themselves (enforced in the database). */
+function Assignee({ ticket, role, meId, onDone, onError }: {
+  ticket: ApiTicketDetail; role: string; meId: string | null; onDone: (msg: string) => void; onError: (msg: string) => void;
+}) {
+  const [staff, setStaff] = useState<ApiStaff[]>([]);
+  useEffect(() => {
+    if (role !== 'technician') api<{ data: ApiStaff[] }>('GET', `tickets/${ticket.id}/assignable`).then((r) => setStaff(r.data)).catch(() => setStaff([]));
+  }, [ticket.id, role]);
+  const set = (assignee_id: string | null, ok: string) =>
+    api('PATCH', `tickets/${ticket.id}/assignee`, { assignee_id, version: ticket.version }).then(() => onDone(ok)).catch((e) => onError(errText(e)));
+
+  if (role === 'technician') {
+    const mine = meId !== null && ticket.assignee_id === meId;
+    return (
+      <p className="assignee">
+        {mine ? 'Assigned to you. ' : ticket.assignee_id ? `Assigned to ${ticket.assignee_email ?? 'another technician'}. ` : 'Unassigned. '}
+        {!ticket.assignee_id && meId && <button type="button" className="link" onClick={() => void set(meId, 'You took this request.')}>Take it</button>}
+        {mine && <button type="button" className="link" onClick={() => void set(null, 'You dropped this request.')}>Drop it</button>}
+      </p>
+    );
+  }
+  return (
+    <label className="field">Assigned to
+      <select value={ticket.assignee_id ?? ''} onChange={(e) => {
+        const v = e.target.value || null;
+        void set(v, v ? `Assigned to ${staff.find((s) => s.user_id === v)?.email ?? 'them'}.` : 'Unassigned.');
+      }}>
+        <option value="">Unassigned</option>
+        {ticket.assignee_id && !staff.some((s) => s.user_id === ticket.assignee_id) && <option value={ticket.assignee_id}>{ticket.assignee_email ?? 'Current assignee'}</option>}
+        {staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.email}{s.user_id === meId ? ' (you)' : ''}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export function TicketDialog({ ticketId, role, meId = null, onClose, onChanged }: {
+  ticketId: string | null; role: string; meId?: string | null; onClose: () => void; onChanged: () => void;
 }) {
   const [t, setT] = useState<ApiTicketDetail | null>(null);
   const [targets, setTargets] = useState<ApiTarget[]>([]);
@@ -387,6 +424,8 @@ export function TicketDialog({ ticketId, role, onClose, onChanged }: {
       {t && (
         <div className="stack">
           <p className="hint">Stage: {TICKET_LABELS[t.state]}</p>
+          {staff && <Assignee ticket={t} role={role} meId={meId} onDone={(text) => { setMsg({ kind: 'ok', text }); onChanged(); void load(t.id); }}
+            onError={(text) => setMsg({ kind: 'error', text })} />}
           {q ? (
             <div className="quote">
               <h3>Quote</h3>
@@ -394,6 +433,7 @@ export function TicketDialog({ ticketId, role, onClose, onChanged }: {
                 <dt>Work</dt><dd>{q.action.label}</dd>
                 <dt>Address</dt><dd className="host">{q.target.url}</dd>
                 <dt>Scope</dt><dd>{q.description}</dd>
+                {q.params?.operation && <><dt>Exact change</dt><dd><ChangePreview plan={q.params as unknown as RepairPlan} /></dd></>}
                 <dt>Price</dt><dd>{q.amount_paise === 0 ? 'No charge' : rupees(q.amount_paise)}</dd>
                 <dt>Valid until</dt><dd>{new Date(q.expires_at).toLocaleString('en-IN')}</dd>
               </dl>
@@ -410,6 +450,8 @@ export function TicketDialog({ ticketId, role, onClose, onChanged }: {
             </div>
           ) : <p>No quote yet.</p>}
 
+          {staff && <RepairPanel ticket={t.id} websiteId={t.website_id} approvalId={q?.approved ? (q.approval_id ?? null) : null} state={t.state}
+            onChanged={() => { onChanged(); void load(t.id); }} />}
           {canQuote && (
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();

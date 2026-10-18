@@ -2,9 +2,9 @@ import { it, expect } from 'vitest';
 import { toSite } from './live-mapping';
 import type { ApiSite } from './api';
 
-const base: ApiSite = { id: 's', client_id: null, display_name: 'shop.example', lane: 'unknown', last_verified_at: null, checks: [], coverage: {} };
+const base: ApiSite = { id: 's', client_id: null, display_name: 'shop.example', lane: 'unknown', last_verified_at: null, checks: [], coverage: {}, hosts: ['shop.example'], open_requests: 0, verified_hosts: [] };
 const check = (kind: 'http' | 'tls' | 'dns', severity: 'ok' | 'warning' | 'critical', freshness: 'fresh' | 'stale', target = 't1') =>
-  ({ target_id: target, kind, severity, freshness, result_code: `${kind}_${severity}`, observed_at: '2026-10-16T04:00:00Z' });
+  ({ target_id: target, host: target, source: 'public' as const, kind, severity, freshness, result_code: `${kind}_${severity}`, observed_at: '2026-10-16T04:00:00Z' });
 
 it('never shows a stale OK reading as OK', () => {
   const s = toSite({ ...base, checks: [check('tls', 'ok', 'stale')] });

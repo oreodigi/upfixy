@@ -23,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'full' => EnsureFullAccess::class,
             'mfa.fresh' => RequireFreshMfa::class,
         ]);
+        // API only: never redirect a guest to a login page; the handler answers 401 JSON.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(fn (Request $r) => $r->is('api/*') || $r->expectsJson());
@@ -51,6 +53,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 'DNS verification needs a domain name' => [422, 'DNS verification needs a domain name, not an IP address. Use the file method instead.'],
                 'not allowed to verify ownership' => [403, "You don't have permission to verify ownership of this website."],
                 'only owners and admins can revoke' => [403, 'Only owners and admins can revoke ownership proof.'],
+                'technicians can only take or drop their own' => [403, 'Technicians can only take or drop their own requests.'],
+                'requests can only be assigned to active staff' => [422, 'Requests can only be assigned to active staff.'],
+                'this technician is not assigned to the client' => [422, "That technician isn't assigned to this client."],
             ];
             foreach ($known as $needle => [$status, $text]) {
                 if (str_contains($msg, $needle)) {

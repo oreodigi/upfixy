@@ -27,7 +27,7 @@ export function toSite(s: ApiSite): Site {
     .filter((c) => c.freshness === 'fresh' && (c.severity === 'warning' || c.severity === 'critical'))
     .map((c) => {
       const code = c.result_code.toUpperCase();
-      return { code, title: HELP[code]?.title ?? `${c.kind.toUpperCase()} check ${c.severity === 'critical' ? 'failing' : 'needs attention'}`, observedAt: new Date(c.observed_at) };
+      return { code, host: c.host, title: HELP[code]?.title ?? `${c.kind.toUpperCase()} check ${c.severity === 'critical' ? 'failing' : 'needs attention'}`, observedAt: new Date(c.observed_at) };
     });
   const observed = s.checks.map((c) => new Date(c.observed_at).getTime());
 
@@ -39,6 +39,10 @@ export function toSite(s: ApiSite): Site {
     lastVerifiedAt: s.last_verified_at ? new Date(s.last_verified_at) : null,
     lastObservedAt: observed.length ? new Date(Math.max(...observed)) : null,
     issues,
+    href: `/websites/${s.id}`,
+    hosts: s.hosts ?? [],
+    openRequests: s.open_requests ?? 0,
+    verifiedHosts: s.verified_hosts ?? [],
     components: {
       domain: checkComponent(worst('dns')),
       hosting: { state: 'not_connected', label: 'Not connected' },
@@ -54,5 +58,9 @@ export function toSite(s: ApiSite): Site {
 }
 
 export function toClient(c: ApiClient): Client {
-  return { id: c.id, name: c.name, lane: c.lane, technician: null, tags: [], openTickets: 0, sites: c.websites.map(toSite) };
+  return {
+    id: c.id, name: c.name, lane: c.lane, technician: null, tags: [], openTickets: c.open_requests ?? 0,
+    sites: c.websites.map(toSite), href: `/clients/${c.id}`,
+    staff: (c.staff ?? []).map((s) => s.email ?? 'Technician'),
+  };
 }
