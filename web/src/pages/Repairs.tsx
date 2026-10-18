@@ -58,6 +58,7 @@ export function RepairPanel({ ticket, websiteId, approvalId, state, onChanged }:
   const [attempts, setAttempts] = useState<ApiRepairAttempt[]>([]);
   const [form, setForm] = useState({ connection_id: '', monitor_target_id: '', record_id: '', proposed_content: '' });
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = async () => {
     const [c, w, r] = await Promise.all([
@@ -69,6 +70,7 @@ export function RepairPanel({ ticket, websiteId, approvalId, state, onChanged }:
     setConns(live); setTargets(w.targets); setDrafts(r.drafts);
     setAttempts(await Promise.all(r.attempts.map((a) => api<ApiRepairAttempt>('GET', `repair-attempts/${a.id}`))));
     setForm((f) => ({ ...f, connection_id: f.connection_id || live[0]?.id || '', monitor_target_id: f.monitor_target_id || w.targets[0]?.id || '' }));
+    setLoaded(true);
   };
   useEffect(() => { void load().catch((e) => setMsg({ kind: 'error', text: errText(e) })); }, [ticket]); // eslint-disable-line react-hooks/exhaustive-deps
   // Poll while the executor is working on something.
@@ -84,8 +86,14 @@ export function RepairPanel({ ticket, websiteId, approvalId, state, onChanged }:
   const latest = drafts[0];
   const canQuote = latest?.state === 'ready' && ['investigating', 'waiting_for_customer', 'quote_pending'].includes(state);
 
-  if (conns.length === 0) {
-    return <section className="panel-box"><h3>Automated DNS fix</h3><p className="hint">Connect the website's Cloudflare zone (Domain tab) to offer a one-record automated fix.</p></section>;
+  if (!loaded || conns.length === 0) {
+    return (
+      <section className="panel-box" aria-busy={!loaded}><h3>Automated DNS fix</h3>
+        {msg ? <p className={msg.kind} role="alert">{msg.text}</p>
+          : !loaded ? <p className="hint" role="status">Loading…</p>
+          : <p className="hint">Connect the website's Cloudflare zone (Domain tab) to offer a one-record automated fix.</p>}
+      </section>
+    );
   }
   return (
     <section className="panel-box repair" aria-labelledby="repair-h">

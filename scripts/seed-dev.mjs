@@ -116,7 +116,21 @@ const ticket = async (w, title, ...states) => {
   for (const s of states) await db.query('UPDATE tickets SET state = $2, version = version + 1 WHERE id = $1', [id, s]);
   return id;
 };
-await ticket(kj.w, 'Homepage returns 503', 'investigating');
+const kj503 = await ticket(kj.w, 'Homepage returns 503', 'investigating');
+
+// M7: a scoped Cloudflare connection (dummy sealed value, unusable) and an executor-read preview.
+const zone = 'a'.repeat(32), rec = 'b'.repeat(32);
+const conn = (await one(`INSERT INTO dns_connections(workspace_id, website_id, provider, zone_id, zone_name, secret_sealed, created_by, verified_at, verify_result)
+  VALUES ($1, $2, 'cloudflare', $3, 'kalaghar-jewels.com', 'v1:demo-not-a-real-token', $4, now() - interval '2 hours', 'active') RETURNING id`, [agency, kj.w, zone, owner])).id;
+const plan = {
+  version: 'repair-plan-v1', operation: 'cloudflare.dns.update_address_record', connection_id: conn, zone_id: zone, zone_name: 'kalaghar-jewels.com',
+  record_id: rec, record_name: 'kalaghar-jewels.com', record_type: 'A',
+  before: { content: '93.184.216.34', ttl: 1, proxied: false }, after: { content: '93.184.216.35', ttl: 1, proxied: false },
+  verification: { resolve: 'kalaghar-jewels.com', expect: '93.184.216.35', http_target_id: kj.t, http_was_ok: false },
+  rollback: 'If public DNS does not show the new address, or the website stops responding because of this change, the old address is put back automatically.',
+};
+await db.query(`INSERT INTO repair_drafts(workspace_id, ticket_id, monitor_target_id, connection_id, record_id, proposed_content, state, plan, requested_by, read_at)
+  VALUES ($1, $2, $3, $4, $5, '93.184.216.35', 'ready', $6, $7, now())`, [agency, kj503, kj.t, conn, rec, JSON.stringify(plan), owner]);
 const ssl = await ticket(shop.w, 'Renew SSL certificate', 'investigating');
 await db.query(`INSERT INTO quotes(workspace_id, ticket_id, monitor_target_id, action_code, description, amount_paise, issued_by, fingerprint, expires_at)
                 VALUES ($1, $2, $3, 'cpanel.ssl_fix', 'Re-run AutoSSL and confirm the certificate covers shop.mitratraders.in', 0, $4, repeat('0', 64), NULL)`,

@@ -419,3 +419,19 @@ tr.muted th, tr.muted td { color: var(--ink-2); }
 .report .plain li { margin: 6px 0; }
 .ai { border-left: 5px solid #5b5bd6; }
 .ai__finding { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+
+/* M7 repairs: exact change preview and attempt progress */
+.change dl { display: grid; grid-template-columns: minmax(84px, max-content) 1fr; gap: 6px 12px; margin: 12px 0; }
+.change dt { font-weight: 700; color: var(--ink-2); }
+.change dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.change code { font-size: 15px; }
+.steps { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 6px; counter-reset: s; }
+.steps li { counter-increment: s; display: flex; gap: 10px; align-items: center; color: var(--ink-2); }
+.steps li::before { content: counter(s); flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  border: 2px solid currentColor; font-weight: 800; font-size: 13px; }
+.steps li.done { color: var(--ink); }
+.steps li.done::before { content: '✓'; background: var(--ink); color: #fff; border-color: var(--ink); }
+.steps li.now { color: var(--ink); font-weight: 800; }
+.steps li.end--rolled_back::before, .steps li.end--needs_technician::before { content: '!'; background: var(--warning-bg); color: var(--warning); border-color: var(--warning); }
+.steps li.end--refused::before { content: '–'; background: var(--surface); color: var(--ink-2); border-color: var(--ink-2); }
+.repair .stack { margin-top: 16px; }
