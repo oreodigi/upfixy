@@ -22,7 +22,8 @@ class CrossTenantSweepTest extends TestCase
 
     /** Tables whose contents must be byte-identical before and after the sweep. */
     private const WATCHED = ['workspaces', 'memberships', 'clients', 'client_assignments', 'websites', 'monitor_targets',
-        'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users'];
+        'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
+        'saved_views'];
 
     protected function setUp(): void
     {
@@ -47,6 +48,9 @@ class CrossTenantSweepTest extends TestCase
         $this->enableMfa($v['alice']);
         $v['invitation'] = $this->api($v['alice'], $v['ws'], 'POST', 'invitations',
             ['email' => 'pending@test.local', 'role' => 'technician'], mfaFresh: true)->assertCreated()->json('id');
+        $v['view'] = $this->owner()->selectOne(
+            "INSERT INTO saved_views(workspace_id, user_id, board, name, filters) VALUES (?, ?, 'websites', 'Victim view', '{\"q\":\"victim\"}') RETURNING id",
+            [$v['ws'], $v['alice']->id])->id;
         $this->v = $v;
     }
 
@@ -66,6 +70,11 @@ class CrossTenantSweepTest extends TestCase
             'POST api/v1/tickets/{ticket}/quotes' => ['monitor_target_id' => $v['target'], 'action_code' => 'provider.covered_fix', 'description' => 'x'],
             'POST api/v1/quotes/{quote}/void' => ['reason' => 'attacker'],
             'POST api/v1/tickets/{ticket}/approvals' => ['quote_id' => $v['quote'], 'fingerprint' => $v['fingerprint']],
+            'GET api/v1/clients/{client}', 'GET api/v1/websites/{website}/history', 'GET api/v1/tickets/{ticket}/assignable' => [],
+            'PATCH api/v1/tickets/{ticket}/assignee' => ['assignee_id' => $attacker['user']->id, 'version' => 2],
+            'PATCH api/v1/views/{view}' => ['name' => 'Taken over'],
+            'DELETE api/v1/views/{view}' => [],
+            'DELETE api/v1/clients/{client}/assignments/{user}' => [],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -80,6 +89,7 @@ class CrossTenantSweepTest extends TestCase
             'ticket' => $this->v['ticket'],
             'quote' => $this->v['quote'],
             'invitation' => $this->v['invitation'],
+            'view' => $this->v['view'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }
@@ -109,9 +119,10 @@ class CrossTenantSweepTest extends TestCase
     private function sweep(array $attacker, array $allowedStatuses): void
     {
         $routes = $this->idRoutes();
-        $this->assertGreaterThanOrEqual(14, count($routes), 'route discovery looks broken');
+        $this->assertGreaterThanOrEqual(20, count($routes), 'route discovery looks broken');
         $before = $this->snapshot();
-        $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'alice@test.local', 'pending@test.local', $this->v['fingerprint']];
+        $secrets = ['Victim Client Pvt Ltd', 'victim-secret.example', 'Victim work', 'alice@test.local', 'pending@test.local',
+            'Victim view', $this->v['fingerprint']];
 
         foreach ($routes as [$method, $uri]) {
             $path = preg_replace_callback('/\{(\w+)\}/', fn ($m) => $this->param($m[1]), substr($uri, strlen('api/v1/')));

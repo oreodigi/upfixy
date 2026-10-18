@@ -9,7 +9,7 @@ import {
 export type ComponentKey = 'domain' | 'hosting' | 'ssl' | 'security' | 'backup' | 'errors';
 export interface Component { state: ComponentState; label: string }
 
-export interface Issue { code: string; title: string; observedAt: Date }
+export interface Issue { code: string; title: string; observedAt: Date; host?: string }
 
 export interface Site {
   id: string;
@@ -21,6 +21,11 @@ export interface Site {
   lastObservedAt: Date | null;
   components: Record<ComponentKey, Component>;
   issues: Issue[];
+  /** Live app only. */
+  href?: string;
+  hosts?: string[];
+  openRequests?: number;
+  verifiedHosts?: string[];
 }
 
 export interface Client {
@@ -31,6 +36,9 @@ export interface Client {
   sites: Site[];
   lane: HealthLane;
   openTickets: number;
+  /** Live app only: technicians assigned to this client (emails where visible). */
+  staff?: string[];
+  href?: string;
 }
 
 export interface Ticket {
@@ -41,6 +49,10 @@ export interface Ticket {
   state: TicketState;
   assignee: string | null;
   hasApproval: boolean;
+  /** Live app only. */
+  assigneeId?: string | null;
+  version?: number;
+  hasQuote?: boolean;
 }
 
 const now = new Date();

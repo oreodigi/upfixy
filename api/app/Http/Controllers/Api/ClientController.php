@@ -61,6 +61,20 @@ class ClientController
         return response()->json(null, 204);
     }
 
+    /** Remove a person from a client. Their open requests for that client return to the unassigned pool. */
+    public function unassign(string $client, string $user): JsonResponse
+    {
+        $this->requireAdmin('client.unassign');
+        $n = DB::delete('DELETE FROM client_assignments WHERE client_id = ? AND user_id = ?', [$client, $user]);
+        if ($n === 0) abort(404);
+        $freed = DB::update(
+            "UPDATE tickets SET assignee_id = NULL, version = version + 1
+              WHERE assignee_id = ? AND state NOT IN ('resolved', 'closed')
+                AND website_id IN (SELECT id FROM websites WHERE client_id = ?)", [$user, $client]);
+        Audit::record('client.unassigned', 'allowed', 'client', $client, ['user_id' => $user, 'requests_unassigned' => $freed]);
+        return response()->json(null, 204);
+    }
+
     private function requireAdmin(string $action): void
     {
         if (!in_array(TenantContext::role(), ['owner', 'admin'], true)) {
