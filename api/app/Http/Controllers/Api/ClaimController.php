@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Jobs\VerifyOwnershipClaim;
 use App\Support\Audit;
+use App\Support\TenantContext;
 use App\Support\Net\OwnershipChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,8 +45,15 @@ class ClaimController
     /** Queues a check by the verification worker; poll GET claims for the result. */
     public function check(string $claim): JsonResponse
     {
-        $c = DB::selectOne('SELECT id, status FROM ownership_claims WHERE id = ?', [$claim]);
+        $c = DB::selectOne('SELECT oc.id, oc.status, w.client_id FROM ownership_claims oc JOIN websites w ON w.id = oc.website_id WHERE oc.id = ?', [$claim]);
         if (!$c) abort(404);
+        // Same people who may start a verification (FRD §6 "Verify ownership").
+        $role = TenantContext::role();
+        if (!in_array($role, ['owner', 'admin'], true)
+            && !($role === 'client_owner' && DB::selectOne('SELECT app_is_assigned(?) AS ok', [$c->client_id])->ok)) {
+            Audit::record('claim.check', 'denied', 'claim', $claim);
+            abort(403, 'Only owners, admins and the client owner can verify ownership.');
+        }
         if ($c->status !== 'challenge_issued') {
             return response()->json(['message' => "This check is already {$c->status}.", 'status' => $c->status], 409);
         }

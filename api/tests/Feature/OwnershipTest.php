@@ -120,4 +120,24 @@ class OwnershipTest extends TestCase
         $claim = $this->verifyOwnership($this->f['olive'], $this->f['ws'], $this->f['site'], 'shop.example');
         $this->api($this->f['olive'], $this->f['ws'], 'POST', "claims/{$claim}/check")->assertStatus(409);
     }
+
+    /** Audit S-04: only people who may start a verification may run its check. */
+    public function test_only_verifiers_can_run_an_ownership_check(): void
+    {
+        $f = $this->f;
+        $client = $this->makeClient($f['ws'], 'Client X');
+        $this->owner()->table('websites')->where('id', $f['site'])->update(['client_id' => $client]);
+        $carl = $this->makeUser('carl');
+        $sara = $this->makeUser('sara');
+        $this->addMember($f['ws'], $carl, 'client_owner');
+        $this->addMember($f['ws'], $sara, 'client_staff');
+        foreach ([$f['tina'], $carl, $sara] as $u) $this->assign($f['ws'], $client, $u);
+
+        $claim = $this->challenge('dns_txt')->assertCreated()->json('id');
+        $this->dns->txt['_upfixy-challenge.shop.example'] = [];
+        $this->api($f['tina'], $f['ws'], 'POST', "claims/{$claim}/check")->assertForbidden();
+        $this->api($sara, $f['ws'], 'POST', "claims/{$claim}/check")->assertForbidden();
+        $this->api($carl, $f['ws'], 'POST', "claims/{$claim}/check")->assertStatus(202);
+        $this->assertSame('denied', $this->auditRows('claim.check')[0]->outcome);
+    }
 }
