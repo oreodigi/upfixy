@@ -53,4 +53,17 @@ return [
     'diagnostics' => [
         'reuse_minutes' => 60,   // same evidence within this window returns the existing report (AC-DX-006.2)
     ],
+
+    // M7 controlled repairs (FIX-003..005). Three switches must all allow a write:
+    // this flag (default OFF), the global DB kill switch (starts paused) and the workspace switch.
+    'repairs' => [
+        'enabled' => (bool) env('UPFIXY_REPAIRS_ENABLED', false),
+        'public_key' => env('UPFIXY_REPAIRS_PUBLIC_KEY'),   // API: seals DNS tokens
+        'keypair' => env('UPFIXY_REPAIRS_KEYPAIR'),         // EXECUTOR ONLY: opens them. Never set on the API host.
+        'cloudflare_base' => env('UPFIXY_CLOUDFLARE_BASE', 'https://api.cloudflare.com/client/v4'),
+        'lease_seconds' => 60,
+        'hold_seconds' => 60,
+        'verify_window_seconds' => 900,   // propagation window before "indeterminate" (OPEN, §25.8)
+        'verify_interval_seconds' => 30,
+    ],
 ];

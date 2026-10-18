@@ -1,3 +1,4 @@
+import { RepairControls } from './pages/Repairs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, session, type ApiClient, type ApiMe, type ApiSite, type ApiTicket, type ApiWorkspace } from './api';
 import { Ctx, type WorkspaceCtx } from './app-context';
@@ -297,7 +298,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
             : r.name === 'alerts' ? <Alerts onRead={loadUnread} />
             : r.name === 'diagnostic' ? <Diagnosis id={r.id} />
-            : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /></div> : null)
+            : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /><RepairControls /></div> : null)
             : null}
         </main>
 

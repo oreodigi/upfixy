@@ -38,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
                 config('upfixy.ai.timeout'), config('upfixy.ai.max_output_tokens'))
             : null);
         $this->app->bind(\App\Diagnostics\Ai\Gateway::class, fn ($app) => new \App\Diagnostics\Ai\Gateway($app->make(\App\Diagnostics\Ai\AiClient::class), config('upfixy.ai')));
+        // M7 repair executor. Tests replace DnsProvider with a fake zone.
+        $this->app->bind(\App\Repairs\DnsProvider::class, fn () => new \App\Repairs\CloudflareDnsProvider(config('upfixy.repairs.cloudflare_base')));
+        $this->app->bind(\App\Repairs\Executor::class, fn ($app) => new \App\Repairs\Executor(
+            $app->make(\App\Repairs\DnsProvider::class), $app->make(\App\Monitoring\DnsProbe::class), $app->make(\App\Monitoring\HttpProbe::class),
+            config('upfixy.repairs')));
         $this->app->bind(\App\Monitoring\Recorder::class, fn () => new \App\Monitoring\Recorder(
             gethostname() . ':' . getmypid(), $m('worker_version'), $m('region')));
     }

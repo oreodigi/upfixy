@@ -1,4 +1,5 @@
 // SCR-07 Website detail: one tab per area, every value with its source and age.
+import { DnsConnections } from './Repairs';
 import { useEffect, useState } from 'react';
 import { TICKET_LABELS } from '@upfixy/core';
 import { api, ApiError, type ApiCheck, type ApiHistoryRow, type ApiIncident, type ApiWebsiteDetail } from '../api';
@@ -242,6 +243,7 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
             <Readings checks={checks} />
             <h2>History</h2>
             <History id={id} kind={kind} />
+            {tab === 'domain' && ['owner', 'admin', 'technician'].includes(role) && <DnsConnections websiteId={id} />}
           </>
         )}
         {NOT_CONNECTED[tab] && (

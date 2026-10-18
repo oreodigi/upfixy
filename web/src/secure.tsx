@@ -1,9 +1,10 @@
 // M1 hardening UI: step-up, security settings, team, ownership, quotes.
 import { useEffect, useRef, useState } from 'react';
 import { TICKET_LABELS } from '@upfixy/core';
+import { ChangePreview, RepairPanel } from './pages/Repairs';
 import {
   api, ApiError, rupees, setStepUpHandler,
-  type ApiAction, type ApiClaim, type ApiInvitation, type ApiMe, type ApiMember, type ApiStaff, type ApiTarget, type ApiTicketDetail,
+  type ApiAction, type ApiClaim, type ApiInvitation, type ApiMe, type ApiMember, type ApiStaff, type ApiTarget, type ApiTicketDetail, type RepairPlan,
 } from './api';
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -432,6 +433,7 @@ export function TicketDialog({ ticketId, role, meId = null, onClose, onChanged }
                 <dt>Work</dt><dd>{q.action.label}</dd>
                 <dt>Address</dt><dd className="host">{q.target.url}</dd>
                 <dt>Scope</dt><dd>{q.description}</dd>
+                {q.params?.operation && <><dt>Exact change</dt><dd><ChangePreview plan={q.params as unknown as RepairPlan} /></dd></>}
                 <dt>Price</dt><dd>{q.amount_paise === 0 ? 'No charge' : rupees(q.amount_paise)}</dd>
                 <dt>Valid until</dt><dd>{new Date(q.expires_at).toLocaleString('en-IN')}</dd>
               </dl>
@@ -448,6 +450,8 @@ export function TicketDialog({ ticketId, role, meId = null, onClose, onChanged }
             </div>
           ) : <p>No quote yet.</p>}
 
+          {staff && <RepairPanel ticket={t.id} websiteId={t.website_id} approvalId={q?.approved ? (q.approval_id ?? null) : null} state={t.state}
+            onChanged={() => { onChanged(); void load(t.id); }} />}
           {canQuote && (
             <form className="stack" onSubmit={(e) => {
               e.preventDefault();

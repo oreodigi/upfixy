@@ -118,6 +118,7 @@ export interface ApiQuote {
   id: string; ticket_id: string; action: { code: string; label: string }; target: { id: string; host: string; url: string };
   description: string; amount_paise: number; currency: string; expires_at: string; fingerprint: string;
   ownership_verified: boolean; approved: boolean; payment_required: boolean;
+  params?: Record<string, unknown> & { operation?: string }; approval_id?: string | null;
 }
 export interface ApiTicketDetail {
   id: string; title: string; state: TicketState; version: number; website_id: string;
@@ -195,3 +196,17 @@ export interface ApiDiagnosis {
         audit?: { model: string | null; prompt_version: string; schema_version: string; rejection_reasons: string[]; latency_ms: number | null } };
   rule_version?: string;
 }
+
+// ----------------------------------------------------------------- M7 types
+export interface RepairPlan {
+  version: string; operation: string; connection_id: string; zone_id: string; zone_name: string; record_id: string;
+  record_name: string; record_type: 'A' | 'AAAA';
+  before: { content: string; ttl: number; proxied: boolean }; after: { content: string; ttl: number; proxied: boolean };
+  verification: { resolve: string; expect: string; http_target_id: string; http_was_ok: boolean }; rollback: string;
+}
+export interface ApiDnsConnection { id: string; provider: string; zone_id: string; zone_name: string; secret_version: number; created_at: string; verified_at: string | null; verify_result: string | null; revoked_at: string | null }
+export interface ApiRepairDraft { id: string; state: 'reading' | 'ready' | 'refused'; refusal: string | null; plan: RepairPlan | null; created_at: string }
+export type RepairState = 'queued' | 'preflight' | 'executing' | 'verifying' | 'resolved' | 'rolled_back' | 'needs_technician' | 'refused';
+export interface ApiRepairAttempt { id: string; state: RepairState; customer_message: string | null; state_reason?: string; plan?: RepairPlan; created_at: string; updated_at: string;
+  events?: Array<{ kind: string; at: string; detail?: Record<string, unknown> }> }
+export interface ApiRepairControls { platform_enabled: boolean; global: { paused: boolean; reason: string | null }; workspace: { paused: boolean; reason: string | null; changed_at: string | null } }

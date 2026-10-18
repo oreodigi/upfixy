@@ -29,7 +29,7 @@ Needs Node 22+, PHP 8.3 with `pdo_pgsql` and `intl`, Composer, and PostgreSQL 16
 
 ```bash
 # 1. Database roles (once, as a Postgres superuser; Docker does this for you)
-psql -v owner_pw=devonly -v app_pw=devonly -v worker_pw=devonly -v db=upfixy_dev -f db/bootstrap/roles.sql
+psql -v owner_pw=devonly -v app_pw=devonly -v worker_pw=devonly -v executor_pw=devonly -v db=upfixy_dev -f db/bootstrap/roles.sql
 
 # 2. App
 npm install
