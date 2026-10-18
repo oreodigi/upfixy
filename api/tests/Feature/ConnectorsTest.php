@@ -130,7 +130,7 @@ class ConnectorsTest extends TestCase
         $this->assertStringContainsString('can see 2 zones', $c->warnings); // account-wide token: warn, recommend zone scoping
 
         $this->work(1);
-        $zones = $this->owner()->select("SELECT name, facts FROM connector_assets WHERE connector_id = ? ORDER BY name", [$id]);
+        $zones = $this->owner()->select("SELECT name, facts FROM connector_assets WHERE connector_id = ? ORDER BY name COLLATE \"C\"", [$id]);
         $this->assertSame(['kala.example', 'mitra.example'], array_column($zones, 'name'));
         $facts = json_decode($zones[1]->facts, true);
         $this->assertEquals(['A' => 1, 'CNAME' => 1, 'MX' => 1, 'TXT' => 1], $facts['records']['count']);
@@ -264,7 +264,7 @@ class ConnectorsTest extends TestCase
         $c = $this->con($id);
         $this->assertSame('active', $c->status);
         $this->assertSame('{accounts.read,domains.read,ssl.read}', $c->verified_capabilities);
-        $assets = $this->owner()->select("SELECT kind, name, parent_external_id, facts FROM connector_assets WHERE connector_id = ? ORDER BY kind, name", [$id]);
+        $assets = $this->owner()->select("SELECT kind, name, parent_external_id, facts FROM connector_assets WHERE connector_id = ? ORDER BY kind, name COLLATE \"C\"", [$id]);
         $this->assertSame(['account:alpha.example', 'account:beta.example', 'account:reseller-home.example',
             'domain:alpha.example', 'domain:beta.example', 'domain:reseller-home.example'], array_map(fn ($a) => "{$a->kind}:{$a->name}", $assets));
         $this->assertTrue(json_decode($assets[1]->facts, true)['suspended']);
@@ -302,7 +302,8 @@ class ConnectorsTest extends TestCase
         $id = $this->connect('cpanel', ['host' => 'cpanel.host.example', 'username' => 'kala'])->json('id');
         $this->work(2);
         $this->assertSame('{domains.read,ssl.read}', $this->con($id)->verified_capabilities);
-        $names = array_column($this->owner()->select("SELECT name FROM connector_assets WHERE connector_id = ? AND kind = 'domain' ORDER BY name", [$id]), 'name');
+        $names = array_column($this->owner()->select("SELECT name FROM connector_assets WHERE connector_id = ? AND kind = 'domain'", [$id]), 'name');
+        sort($names, SORT_STRING);   // byte order: database collations differ between machines
         $this->assertSame(['blog.kala.example', 'kala-shop.example', 'kala.example'], $names); // invalid names dropped
         foreach ($this->provider->calls as $call) {
             $this->assertContains(substr($call['url'], strlen($base) + 1), CpanelAdapter::ALLOWED);
@@ -364,7 +365,7 @@ class ConnectorsTest extends TestCase
         $this->assertSame(['alpha.example'], array_column($r->json('imported'), 'name'));
         $this->assertSame(['beta.example'], array_column($r->json('needs_review'), 'name'));
         // gamma was not selected: not created. beta was not re-pointed to Mitra.
-        $sites = $this->owner()->select('SELECT w.display_name, w.client_id FROM websites w WHERE workspace_id = ? ORDER BY display_name', [$this->f['ws']]);
+        $sites = $this->owner()->select('SELECT w.display_name, w.client_id FROM websites w WHERE workspace_id = ? ORDER BY display_name COLLATE "C"', [$this->f['ws']]);
         $this->assertSame(['alpha.example', 'beta.example'], array_column($sites, 'display_name'));
         $this->assertSame([$this->f['mitra'], $this->f['kala']], array_column($sites, 'client_id'));
         $beta = $this->owner()->selectOne("SELECT import_state, website_id FROM connector_assets WHERE id = ?", [$byName('domain', 'beta.example')]);
