@@ -39,8 +39,16 @@ export interface ApiTicket {
 export interface ApiWorkspace { id: string; name: string; kind: 'solo' | 'agency'; role: string }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public body: unknown) { super(message); }
+  constructor(public status: number, message: string, public body: unknown, public code?: string) { super(message); }
 }
+
+/**
+ * Step-up MFA: when the API answers 403 mfa_step_up_required, the app asks for
+ * a code (StepUpDialog), then the original request is retried once.
+ */
+type StepUpHandler = () => Promise<boolean>;
+let stepUp: StepUpHandler | null = null;
+export const setStepUpHandler = (h: StepUpHandler | null) => { stepUp = h; };
 
 const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -56,7 +64,7 @@ export const session = {
   setWorkspace: (w: string | null) => store.set('upfixy.workspace', w),
 };
 
-export async function api<T>(method: string, path: string, body?: unknown, opts: { workspace?: boolean } = {}): Promise<T> {
+export async function api<T>(method: string, path: string, body?: unknown, opts: { workspace?: boolean; retried?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const token = session.token();
@@ -69,8 +77,33 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   const json = text ? JSON.parse(text) : null;
   if (!res.ok) {
     if (res.status === 401) session.setToken(null);
+    if (res.status === 403 && json?.code === 'mfa_step_up_required' && stepUp && !opts.retried) {
+      if (await stepUp()) return api<T>(method, path, body, { ...opts, retried: true });
+    }
     const firstError = json?.errors ? (Object.values(json.errors)[0] as string[])[0] : null;
-    throw new ApiError(res.status, firstError ?? json?.message ?? `Request failed (${res.status})`, json);
+    throw new ApiError(res.status, firstError ?? json?.message ?? `Request failed (${res.status})`, json, json?.code);
   }
   return json as T;
 }
+
+// ----------------------------------------------------------- M1 hardening types
+export interface ApiMe { id: string; email: string; email_verified: boolean; mfa_enabled: boolean; mfa_fresh: boolean }
+export interface ApiMember { user_id: string; email: string; role: string; suspended_at: string | null; email_verified: boolean; mfa_enabled: boolean }
+export interface ApiInvitation { id: string; email: string; role: string; client_id: string | null; expires_at: string; accepted_at: string | null; revoked_at: string | null }
+export interface ApiClaim {
+  id: string; host: string; method: 'dns_txt' | 'html_file';
+  status: 'challenge_issued' | 'verified' | 'expired' | 'revoked' | 'unverified';
+  instructions: { type: 'TXT'; name: string; value: string } | { url: string; contents: string } | null;
+  challenge_expires_at: string; verified_at: string | null; proof_expires_at: string | null;
+  last_checked_at: string | null; last_check_result: string | null;
+}
+export interface ApiTarget { id: string; url: string; host: string; state: string }
+export interface ApiQuote {
+  id: string; ticket_id: string; action: { code: string; label: string }; target: { id: string; host: string; url: string };
+  description: string; amount_paise: number; currency: string; expires_at: string; fingerprint: string;
+  ownership_verified: boolean; approved: boolean; payment_required: boolean;
+}
+export interface ApiTicketDetail { id: string; title: string; state: TicketState; version: number; website_id: string; allowed_next: TicketState[]; quote: ApiQuote | null }
+export interface ApiAction { code: string; label: string; tier: string; price_paise: number | null }
+
+export const rupees = (paise: number) => (paise / 100).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });

@@ -36,6 +36,10 @@ class WithTenantContext
         DB::beginTransaction();
         try {
             TenantContext::apply($userId, $ws);
+            // Sanctum's own last_used_at write happens before context exists (and is skipped).
+            if ($tokenId = $request->user()?->currentAccessToken()?->getKey()) {
+                DB::update('UPDATE personal_access_tokens SET last_used_at = now() WHERE id = ?', [$tokenId]);
+            }
             $response = ($ws !== null && TenantContext::role() === null)
                 ? response()->json(['message' => 'Workspace not found.'], 404)
                 : $next($request);

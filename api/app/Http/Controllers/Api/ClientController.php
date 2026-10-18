@@ -26,6 +26,27 @@ class ClientController
         return response()->json(['id' => $id], 201);
     }
 
+    /** Contract terms. agency_may_pay (FIX-B) can only be changed by the owner (DB-enforced) with fresh MFA (route). */
+    public function update(Request $request, string $client): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:160'],
+            'agency_may_pay' => ['sometimes', 'boolean'],
+            'client_self_service' => ['sometimes', 'boolean'],
+        ]);
+        if ($data === []) abort(422, 'Nothing to change.');
+        $this->requireAdmin('client.update');
+        if (array_key_exists('agency_may_pay', $data) && ($reason = \App\Http\Middleware\RequireFreshMfa::missing($request))) {
+            Audit::record('client.payment_authority', 'denied', 'client', $client, ['reason' => $reason]);
+            return \App\Http\Middleware\RequireFreshMfa::response($reason);
+        }
+        $sets = implode(', ', array_map(fn ($k) => "{$k} = ?", array_keys($data)));
+        $n = DB::update("UPDATE clients SET {$sets} WHERE id = ?", [...array_values($data), $client]);
+        if ($n === 0) abort(404);
+        Audit::record('client.updated', 'allowed', 'client', $client, $data);
+        return response()->json(null, 204);
+    }
+
     public function assign(Request $request, string $client): JsonResponse
     {
         $data = $request->validate(['user_id' => ['required', 'uuid']]);

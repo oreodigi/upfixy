@@ -3,35 +3,52 @@
 namespace Tests;
 
 use App\Models\User;
+use App\Support\Net\HttpTransport;
+use App\Support\Net\Resolver;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
-use Laravel\Sanctum\Sanctum;
+use Tests\Fakes\FakeHttp;
+use Tests\Fakes\FakeResolver;
 
 /**
  * Feature tests run against real PostgreSQL (upfixy_api_test) through the
- * restricted upfixy_app role, so RLS and triggers are exercised exactly as
- * in production. Fixtures are written through the owner connection.
+ * restricted upfixy_app role with REAL bearer tokens, so RLS, triggers and the
+ * token lookup function are exercised exactly as in production. Fixtures are
+ * written through the owner connection. No network: DNS and HTTP are faked.
  */
 abstract class TestCase extends BaseTestCase
 {
     private static bool $schemaReady = false;
+    protected FakeResolver $dns;
+    protected FakeHttp $http;
+    /** @var array<string, string> user id => plain token */
+    private array $tokens = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-        $owner = DB::connection('pgsql_owner');
+        $owner = $this->owner();
         if (!self::$schemaReady) {
             $owner->unprepared('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;');
             Artisan::call('migrate', ['--database' => 'pgsql_owner', '--force' => true]);
             self::$schemaReady = true;
         }
-        $tables = $owner->table('pg_tables')->where('schemaname', 'public')
-            ->whereNotIn('tablename', ['migrations', 'schema_migrations'])->pluck('tablename')->all();
-        $owner->unprepared('ALTER TABLE audit_events DISABLE TRIGGER USER;'
-            . 'TRUNCATE ' . implode(', ', $tables) . ' RESTART IDENTITY CASCADE;'
-            . 'ALTER TABLE audit_events ENABLE TRIGGER USER;');
+        $owner->unprepared("DO \$\$ DECLARE t text; BEGIN
+            ALTER TABLE audit_events DISABLE TRIGGER USER; ALTER TABLE quotes DISABLE TRIGGER USER;
+            FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+                     AND tablename NOT IN ('migrations', 'schema_migrations', 'action_catalog') LOOP
+              EXECUTE format('TRUNCATE %I RESTART IDENTITY CASCADE', t);
+            END LOOP;
+            ALTER TABLE audit_events ENABLE TRIGGER USER; ALTER TABLE quotes ENABLE TRIGGER USER; END \$\$");
+
+        $this->dns = new FakeResolver();
+        $this->http = new FakeHttp();
+        $this->app->instance(Resolver::class, $this->dns);
+        $this->app->instance(HttpTransport::class, $this->http);
+        $this->tokens = [];
     }
 
     protected function owner()
@@ -41,9 +58,41 @@ abstract class TestCase extends BaseTestCase
 
     protected function makeUser(string $name, bool $verified = true): User
     {
-        $id = $this->owner()->selectOne("INSERT INTO users(email, password_hash, email_verified_at) VALUES (?, ?, ?) RETURNING id",
-            ["{$name}@test.local", password_hash('correct horse battery', PASSWORD_BCRYPT), $verified ? now() : null])->id;
-        return User::findOrFail($id);
+        $row = $this->owner()->selectOne(
+            'INSERT INTO users(email, password_hash, email_verified_at) VALUES (?, ?, ?)
+             RETURNING id, email, email_verified_at, mfa_enabled_at, created_at',
+            ["{$name}@test.local", password_hash('correct horse battery', PASSWORD_BCRYPT, ['cost' => 4]), $verified ? now() : null]);
+        return (new User)->newFromBuilder((array) $row);
+    }
+
+    /** Turn on MFA for a user directly (fixture) and return the TOTP secret. */
+    protected function enableMfa(User $user): string
+    {
+        $secret = (new \PragmaRX\Google2FA\Google2FA)->generateSecretKey(32);
+        $this->owner()->update('UPDATE users SET mfa_secret_enc = ?, mfa_enabled_at = now() WHERE id = ?',
+            [\Illuminate\Support\Facades\Crypt::encryptString($secret), $user->id]);
+        $user->mfa_enabled_at = now();
+        $this->tokens = array_filter($this->tokens, fn ($k) => !str_starts_with($k, $user->id), ARRAY_FILTER_USE_KEY);
+        return $secret;
+    }
+
+    protected function totp(string $secret, int $offsetSteps = 0): string
+    {
+        $g = new \PragmaRX\Google2FA\Google2FA;
+        return $g->oathTotp($secret, $g->getTimestamp() + $offsetSteps);
+    }
+
+    /** A real API token, created through the owner connection (fixture). */
+    protected function tokenFor(User $user, bool $mfaFresh = false, array $abilities = ['*']): string
+    {
+        $key = $user->id . ($mfaFresh ? ':fresh' : '') . implode(',', $abilities);
+        if (isset($this->tokens[$key])) return $this->tokens[$key];
+        $secret = 'upfx_' . bin2hex(random_bytes(20));
+        $id = $this->owner()->selectOne(
+            "INSERT INTO personal_access_tokens(tokenable_type, tokenable_id, name, token, abilities, expires_at, created_at, updated_at, mfa_verified_at)
+             VALUES ('App\\Models\\User', ?, 'test', ?, ?, now() + interval '1 day', now(), now(), ?) RETURNING id",
+            [$user->id, hash('sha256', $secret), json_encode($abilities), $mfaFresh ? now() : null])->id;
+        return $this->tokens[$key] = "{$id}|{$secret}";
     }
 
     protected function makeWorkspace(string $name, string $kind = 'agency'): string
@@ -76,6 +125,16 @@ abstract class TestCase extends BaseTestCase
         return [$site, $target];
     }
 
+    /** Verified ownership of $host on $site, the production way: API challenge + worker check against fake DNS. */
+    protected function verifyOwnership(User $by, string $ws, string $site, string $host): string
+    {
+        $claim = $this->api($by, $ws, 'POST', "websites/{$site}/claims", ['host' => $host, 'method' => 'dns_txt'])->assertCreated();
+        $this->dns->txt["_upfixy-challenge.{$host}"] = [$claim->json('instructions.value')];
+        $this->api($by, $ws, 'POST', "claims/{$claim->json('id')}/check")->assertStatus(202);
+        $this->assertSame('verified', $this->owner()->table('ownership_claims')->where('id', $claim->json('id'))->value('status'));
+        return $claim->json('id');
+    }
+
     protected function observe(string $ws, string $target, string $kind, string $severity, int $minutesAgo = 1, int $cycle = 1): void
     {
         $this->owner()->insert("INSERT INTO observations(workspace_id, monitor_target_id, check_kind, cycle_no, severity, result_code, observed_at)
@@ -96,11 +155,12 @@ abstract class TestCase extends BaseTestCase
         return $id;
     }
 
-    /** Make an API call as $user in workspace $ws. */
-    protected function api(User $user, ?string $ws, string $method, string $uri, array $data = []): TestResponse
+    /** Make an API call as $user in workspace $ws with a real bearer token. */
+    protected function api(User $user, ?string $ws, string $method, string $uri, array $data = [], bool $mfaFresh = false): TestResponse
     {
-        Sanctum::actingAs($user);
-        $headers = $ws ? ['X-Workspace-Id' => $ws] : [];
+        Auth::forgetGuards(); // the request guard caches the user across requests in one test
+        $headers = ['Authorization' => 'Bearer ' . $this->tokenFor($user, $mfaFresh)];
+        if ($ws) $headers['X-Workspace-Id'] = $ws;
         return $this->json($method, "/api/v1/{$uri}", $data, $headers);
     }
 

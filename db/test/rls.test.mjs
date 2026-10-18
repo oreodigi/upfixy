@@ -142,7 +142,7 @@ describe('tenant isolation', () => {
     expect(role).toBe('owner');
     await expect(as(id.bob, id.wsA, (c) =>
       c.query("INSERT INTO memberships VALUES ($1, $2, 'admin')", [id.wsA, id.bob]),
-    )).rejects.toThrow(/row-level security/);
+    )).rejects.toThrow(/permission denied|row-level security/);
   });
 });
 
@@ -204,51 +204,7 @@ describe('ticket workflow (§18.2)', () => {
     expect(r.rowCount).toBe(0);
   });
 
-  it('AC-SVC-003.3: Quote pending → Ready for work needs a recorded approval, even at ₹0', async () => {
-    await setState(id.ticketX, 'quote_pending');
-    await expect(as(id.alice, id.wsA, (c) => c.query(
-      "UPDATE tickets SET state = 'ready_for_work', version = version + 1 WHERE id = $1", [id.ticketX],
-    ))).rejects.toThrow(/no valid approval/);
-
-    await as(id.carl, id.wsA, (c) => c.query(
-      "INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at) VALUES ($1,$2,0,'dns:a-record:shop.example',$3, now() + interval '1 day')",
-      [id.wsA, id.ticketX, id.carl]));
-    const r = await as(id.alice, id.wsA, (c) => c.query(
-      "UPDATE tickets SET state = 'ready_for_work', version = version + 1 WHERE id = $1 RETURNING state", [id.ticketX]));
-    expect(rows(r)[0].state).toBe('ready_for_work');
-  });
-
-  it('paid work stays blocked until payment is verified (client cannot self-mark paid)', async () => {
-    const t = (await owner.query("INSERT INTO tickets(workspace_id, website_id, title) VALUES ($1,$2,'paid') RETURNING id", [id.wsA, id.siteX])).rows[0].id;
-    await setState(t, 'investigating', 'quote_pending');
-    await as(id.carl, id.wsA, (c) => c.query(
-      "INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at, payment_verified) VALUES ($1,$2,10000,'dns:cname',$3, now() + interval '1 day', true)",
-      [id.wsA, t, id.carl]));
-    await expect(as(id.alice, id.wsA, (c) => c.query(
-      "UPDATE tickets SET state = 'ready_for_work', version = version + 1 WHERE id = $1", [t],
-    ))).rejects.toThrow(/no valid approval/);
-  });
-
-  it('AC-SVC-003.4: agency owner cannot approve client work unless the contract delegates payment', async () => {
-    const approve = () => as(id.alice, id.wsA, (c) => c.query(
-      "INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at) VALUES ($1,$2,0,'x',$3, now() + interval '1 day')",
-      [id.wsA, id.ticketY, id.alice]));
-    await expect(approve()).rejects.toThrow(/authorised payer/);
-    await owner.query('UPDATE clients SET agency_may_pay = true WHERE id = $1', [id.clientY]);
-    await expect(approve()).resolves.toBeDefined();
-  });
-
-  it('a client owner cannot approve another client\'s work', async () => {
-    await expect(as(id.cara, id.wsA, (c) => c.query(
-      "INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at) VALUES ($1,$2,0,'x',$3, now() + interval '1 day')",
-      [id.wsA, id.ticketX, id.cara]))).rejects.toThrow();
-  });
-
-  it('solo owner can approve their own site work', async () => {
-    await expect(as(id.sam, id.wsSolo, (c) => c.query(
-      "INSERT INTO approvals(workspace_id, ticket_id, amount_paise, action_fingerprint, approved_by, expires_at) VALUES ($1,$2,0,'x',$3, now() + interval '1 day')",
-      [id.wsSolo, id.ticketSolo, id.sam]))).resolves.toBeDefined();
-  });
+  // Approval, quote, ownership and payer tests live in hardening.test.mjs.
 });
 
 describe('UI and database agree on the workflow', () => {

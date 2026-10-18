@@ -104,7 +104,7 @@ export function ClientCard({ client, onHelp }: { client: Client; onHelp: (i: Iss
   );
 }
 
-export function SiteCard({ site, onHelp }: { site: Site; onHelp: (i: Issue, host: string) => void }) {
+export function SiteCard({ site, onHelp, actions }: { site: Site; onHelp: (i: Issue, host: string) => void; actions?: React.ReactNode }) {
   return (
     <article className={`card card--${site.lane}`} aria-label={`${site.host}, ${LANE_LABEL[site.lane]}`}>
       <header className="card__head">
@@ -123,6 +123,7 @@ export function SiteCard({ site, onHelp }: { site: Site; onHelp: (i: Issue, host
         </ul>
       )}
       <footer className="card__foot"><span>{ago(site.lastVerifiedAt, site.lastObservedAt)}</span></footer>
+      {actions && <div className="card__actions">{actions}</div>}
     </article>
   );
 }
@@ -177,9 +178,11 @@ export function SiteList({ sites, clients }: { sites: Site[]; clients?: Client[]
 }
 
 /** Work queue: workflow lanes are separate from health and moved by a validated action, never by drag alone. */
-export function WorkBoard({ tickets, onMove }: {
+export function WorkBoard({ tickets, onMove, onOpen, canMove = true }: {
   tickets: Ticket[];
   onMove: (id: string, to: TicketState) => Promise<string | null> | string | null;
+  onOpen?: (id: string) => void;
+  canMove?: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   return (
@@ -197,7 +200,8 @@ export function WorkBoard({ tickets, onMove }: {
                     <h3>{t.title}</h3>
                     <p className="card__meta"><span className="host">{t.host}</span>{t.client ? `, ${t.client}` : ''}</p>
                     <p className="card__meta">{t.assignee ? `Assigned to ${t.assignee}` : 'Unassigned'}{t.hasApproval ? ', approval recorded' : ''}</p>
-                    <label className="move">
+                    {onOpen && <button type="button" className="link" onClick={() => onOpen(t.id)}>Open request and quote</button>}
+                    {canMove && <label className="move">
                       <span>Move to</span>
                       <select value="" onChange={async (e) => {
                         const to = e.target.value as TicketState;
@@ -213,7 +217,7 @@ export function WorkBoard({ tickets, onMove }: {
                           return <option key={to} value={to}>{TICKET_LABELS[to]}{check.ok ? '' : ' (blocked)'}</option>;
                         })}
                       </select>
-                    </label>
+                    </label>}
                   </article>
                 ))}
               </div>
