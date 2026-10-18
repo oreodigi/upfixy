@@ -138,6 +138,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::get('boards/websites', [BoardController::class, 'websites']);
         Route::get('boards/clients', [BoardController::class, 'clients']);
         Route::get('overview', [BoardController::class, 'overview']);
+        Route::get('boards/metrics', [BoardController::class, 'metrics']);
 
         Route::get('incidents', [IncidentController::class, 'index']);
         Route::get('incidents/{incident}', [IncidentController::class, 'show'])->whereUuid('incident');

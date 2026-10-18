@@ -247,3 +247,17 @@ export interface ApiCoverage {
   id: string; client_id: string | null; client: string | null; website_id: string | null; website: string | null; reference: string; scope: string;
   valid_from: string; valid_until: string; revoked_at: string | null; active: boolean;
 }
+
+// ----------------------------------------------------------------- UI v1: board metrics (read-only, RLS-scoped)
+export interface ApiMetricPoint { hour: string; checks: number; availability_pct: number | null; avg_ms: number | null }
+export interface ApiSiteMetrics {
+  http_checks: number; availability_pct: number | null; avg_ms: number | null; last_ms: number | null;
+  tls_days_left: number | null; tls_not_after: string | null; ms_series: Array<number | null>;
+}
+export interface ApiActivity {
+  kind: string; at: string; website: string; website_id: string; detail: string | null; ticket_id: string | null;
+}
+export interface ApiMetrics {
+  window_hours: number; generated_at: string; series: ApiMetricPoint[];
+  websites: Record<string, ApiSiteMetrics>; activity: ApiActivity[];
+}

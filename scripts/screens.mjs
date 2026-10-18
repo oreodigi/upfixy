@@ -35,22 +35,22 @@ const SCREENS = [
   ['signin', null, null, []],
   ['agency-overview', 'owner', 'Demo Agency', []],
   ['agency-clients', 'owner', 'Demo Agency', [{ goto: '/clients' }]],
-  ['agency-client-detail', 'owner', 'Demo Agency', [{ goto: '/clients' }, { link: 'Mitra Traders' }]],
+  ['agency-client-detail', 'owner', 'Demo Agency', [{ goto: '/clients?q=Mitra' }, { link: 'Mitra Traders' }]],
   ['agency-websites', 'owner', 'Demo Agency', [{ goto: '/websites' }]],
   ['agency-websites-list', 'owner', 'Demo Agency', [{ goto: '/websites?lane=critical' }, { click: 'List' }]],
-  ['agency-website-detail', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }]],
-  ['agency-website-ssl', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'SSL' }]],
-  ['agency-website-activity', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'Activity' }, { click: 'Check now' }]],
+  ['agency-website-detail', 'owner', 'Demo Agency', [{ goto: '/websites?q=mitratraders' }, { link: /mitratraders/, nth: 0 }]],
+  ['agency-website-ssl', 'owner', 'Demo Agency', [{ goto: '/websites?q=mitratraders' }, { link: /mitratraders/, nth: 0 }, { tab: 'SSL' }]],
+  ['agency-website-activity', 'owner', 'Demo Agency', [{ goto: '/websites?q=mitratraders' }, { link: /mitratraders/, nth: 0 }, { tab: 'Activity' }, { click: 'Check now' }]],
   ['agency-alerts', 'owner', 'Demo Agency', [{ goto: '/alerts' }]],
   ['agency-diagnosis', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /kalaghar-jewels\.com/, nth: 0 }, { click: 'Analyze & find solution' }]],
-  ['client-owner-diagnosis', 'client', 'Demo Agency', [{ goto: '/websites' }, { link: /shop\.mitratraders/, nth: 0 }, { click: 'Analyze & find solution' }]],
+  ['client-owner-diagnosis', 'client', 'Demo Agency', [{ goto: '/websites?q=shop.mitratraders' }, { link: /shop\.mitratraders/, nth: 0 }, { click: 'Analyze & find solution' }]],
   ['agency-work', 'owner', 'Demo Agency', [{ goto: '/work' }]],
   ['agency-ticket', 'owner', 'Demo Agency', [{ goto: '/work' }, { text: 'Renew SSL certificate', nth: 0 }]],
   ['agency-repair-preview', 'owner', 'Demo Agency', [{ goto: '/work' }, { text: 'Homepage returns 503', nth: 0 }, { waitFor: 'Send this change as a quote' }]],
   ['agency-website-dns-connection', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /kalaghar-jewels\.com/, nth: 0 }, { tab: 'Domain' }, { waitFor: 'DNS provider connection' }]],
   ['agency-integrations', 'owner', 'Demo Agency', [{ goto: '/integrations' }]],
   ['agency-integration-preview', 'owner', 'Demo Agency', [{ goto: '/integrations' }, { link: 'Larihost reseller (demo)' }, { waitFor: 'Choose what to add' }]],
-  ['agency-website-hosting', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /shop\.mitratraders/, nth: 0 }, { tab: 'Hosting' }, { waitFor: 'From your provider connections' }]],
+  ['agency-website-hosting', 'owner', 'Demo Agency', [{ goto: '/websites?q=shop.mitratraders' }, { link: /shop\.mitratraders/, nth: 0 }, { tab: 'Hosting' }, { waitFor: 'From your provider connections' }]],
   ['agency-billing', 'owner', 'Demo Agency', [{ goto: '/billing' }, { waitFor: 'Coverage contracts' }]],
   ['agency-team', 'owner', 'Demo Agency', [{ goto: '/team' }]],
   ['settings', 'owner', 'Demo Agency', [{ goto: '/settings' }]],
@@ -84,8 +84,8 @@ for (const [name, who, wsName, steps] of SCREENS) {
     }
     await page.goto(BASE + '/', { waitUntil: 'networkidle' });
     for (const st of steps) {
-      if (st.click) await page.getByRole('button', { name: st.click, exact: true }).first().click();
-      if (st.link) await page.getByRole('link', { name: st.link }).nth(st.nth ?? 0).click();
+      if (st.click) await page.getByRole('button', { name: st.click, exact: true }).filter({ visible: true }).first().click();
+      if (st.link) await page.getByRole('link', { name: st.link }).filter({ visible: true }).nth(st.nth ?? 0).click();
       if (st.tab) await page.getByRole('tab', { name: st.tab, exact: true }).click();
       if (st.text) await page.getByText(st.text).nth(st.nth ?? 0).click();
       if (st.goto) await page.goto(BASE + st.goto, { waitUntil: 'networkidle' });
