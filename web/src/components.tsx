@@ -5,6 +5,7 @@ import {
 } from '@upfixy/core';
 import type { Client, Site, Ticket, Issue, ComponentKey } from './demo-data';
 import { HELP, supportMessage } from './help';
+import { onLinkClick } from './router';
 
 export const LANES: HealthLane[] = ['critical', 'warning', 'unknown', 'needs_setup', 'healthy'];
 export const LANE_LABEL: Record<HealthLane, string> = {
@@ -13,15 +14,16 @@ export const LANE_LABEL: Record<HealthLane, string> = {
 const GLYPH: Record<HealthLane | ComponentState, string> = {
   critical: '!', warning: '▲', unknown: '?', needs_setup: '+', healthy: '✓', ok: '✓', not_connected: '–',
 };
-const COMPONENT_LABEL: Record<ComponentKey, string> = {
-  domain: 'Domain', hosting: 'Hosting', ssl: 'SSL', security: 'Security', backup: 'Backup', errors: 'Errors',
+export const COMPONENT_LABEL: Record<ComponentKey, string> = {
+  domain: 'Domain', ssl: 'SSL', errors: 'Errors', hosting: 'Hosting', security: 'Security', backup: 'Backup',
 };
 
 const since = (d: Date) => {
   const m = Math.round((Date.now() - d.getTime()) / 60_000);
   if (m < 1) return 'just now';
   if (m < 60) return `${m} min ago`;
-  return `${Math.round(m / 60)} h ago`;
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} days ago`;
 };
 
 /** "Checked …" only for fresh readings; stale data says so instead of hiding its age. */
@@ -30,6 +32,7 @@ export function ago(verified: Date | null, observed: Date | null = null): string
   if (observed) return `Last reading ${since(observed)} (stale)`;
   return 'Never checked';
 }
+export { since };
 
 export function StatusPill({ lane }: { lane: HealthLane }) {
   return (
@@ -40,21 +43,28 @@ export function StatusPill({ lane }: { lane: HealthLane }) {
   );
 }
 
-function ComponentRow({ components }: { components: Site['components'] }) {
+/** Link that navigates in-app; plain <span> in the demo (no href). */
+export function Title({ href, children, className }: { href?: string; children: React.ReactNode; className?: string }) {
+  return href ? <a href={href} onClick={onLinkClick} className={`title-link ${className ?? ''}`}>{children}</a> : <>{children}</>;
+}
+
+/** One row per component: icon, name, honest value. Readable at card width. */
+export function StatusList({ components, only }: { components: Site['components']; only?: ComponentKey[] }) {
   return (
-    <dl className="components">
-      {(Object.keys(COMPONENT_LABEL) as ComponentKey[]).map((k) => (
-        <div key={k} className={`comp comp--${components[k].state}`}>
-          <dt>{COMPONENT_LABEL[k]}</dt>
-          <dd><span aria-hidden="true">{GLYPH[components[k].state]} </span>{components[k].label}</dd>
-        </div>
+    <ul className="status" aria-label="Status by area">
+      {(only ?? (Object.keys(COMPONENT_LABEL) as ComponentKey[])).map((k) => (
+        <li key={k} className={`st st--${components[k].state}`}>
+          <span className="st__glyph" aria-hidden="true">{GLYPH[components[k].state]}</span>
+          <span className="st__label">{COMPONENT_LABEL[k]}</span>
+          <span className="st__value">{components[k].label}</span>
+        </li>
       ))}
-    </dl>
+    </ul>
   );
 }
 
-/** Worst component across a client's sites, for the client card summary row. */
-function worstComponents(sites: Site[]): Site['components'] {
+/** Worst component across a client's sites, for the client card summary. */
+export function worstComponents(sites: Site[]): Site['components'] {
   const rank: Record<ComponentState, number> = { critical: 4, warning: 3, unknown: 2, not_connected: 1, ok: 0 };
   const out = {} as Site['components'];
   for (const k of Object.keys(COMPONENT_LABEL) as ComponentKey[]) {
@@ -63,8 +73,24 @@ function worstComponents(sites: Site[]): Site['components'] {
   return out;
 }
 
+function IssueList({ issues, onHelp, showHost }: { issues: Array<Issue & { host?: string }>; onHelp: (i: Issue, host: string) => void; showHost?: boolean }) {
+  if (!issues.length) return null;
+  return (
+    <ul className="issues">
+      {issues.map((i) => (
+        <li key={(i.host ?? '') + i.code}>
+          <span className="issues__text">{showHost && i.host && <strong>{i.host} </strong>}{i.title}</span>
+          <button type="button" className="link" onClick={() => onHelp(i, i.host ?? '')}>Help me understand</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 export function ClientCard({ client, onHelp }: { client: Client; onHelp: (i: Issue, host: string) => void }) {
-  const issues = client.sites.flatMap((s) => s.issues.map((i) => ({ ...i, host: s.host }))).slice(0, 3);
+  const issues = client.sites.flatMap((s) => s.issues.map((i) => ({ ...i, host: i.host ?? s.host }))).slice(0, 3);
   const impacted = client.sites.filter((s) => s.lane !== 'healthy').length;
   const times = (xs: Array<Date | null>) => xs.filter(Boolean).map((d) => d!.getTime());
   const verified = times(client.sites.map((s) => s.lastVerifiedAt));
@@ -73,30 +99,22 @@ export function ClientCard({ client, onHelp }: { client: Client; onHelp: (i: Iss
   const allFresh = verified.length === client.sites.length && verified.length > 0;
   const oldest = allFresh ? new Date(Math.min(...verified)) : null;
   const newestObserved = observed.length ? new Date(Math.max(...observed)) : null;
+  const staff = client.staff ?? (client.technician ? [client.technician] : []);
   return (
     <article className={`card card--${client.lane}`} aria-label={`${client.name}, ${LANE_LABEL[client.lane]}`}>
       <header className="card__head">
-        <h3>{client.name}</h3>
+        <h3><Title href={client.href}>{client.name}</Title></h3>
         <StatusPill lane={client.lane} />
       </header>
       <p className="card__meta">
-        {client.sites.length} {client.sites.length === 1 ? 'website' : 'websites'}
+        {plural(client.sites.length, 'website')}
         {impacted > 0 && <>, {impacted} need attention</>}
-        {client.openTickets > 0 && <>, {client.openTickets} open {client.openTickets === 1 ? 'request' : 'requests'}</>}
+        {client.openTickets > 0 && <>, {plural(client.openTickets, 'open request')}</>}
       </p>
-      {client.sites.length > 0 && <ComponentRow components={worstComponents(client.sites)} />}
-      {issues.length > 0 && (
-        <ul className="issues">
-          {issues.map((i) => (
-            <li key={i.host + i.code}>
-              <span className="issues__text"><strong>{i.host}</strong> {i.title}</span>
-              <button type="button" className="link" onClick={() => onHelp(i, i.host)}>Help me understand</button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {client.sites.length > 0 && <StatusList components={worstComponents(client.sites)} />}
+      <IssueList issues={issues} onHelp={onHelp} showHost />
       <footer className="card__foot">
-        <span>{client.technician ? `Assigned to ${client.technician}` : 'Unassigned'}</span>
+        <span>{staff.length ? `Staff: ${staff.join(', ')}` : 'No technician assigned'}</span>
         <span>{ago(oldest, newestObserved)}</span>
       </footer>
       {client.tags.length > 0 && <p className="tags">{client.tags.map((t) => <span key={t}>{t}</span>)}</p>}
@@ -108,32 +126,47 @@ export function SiteCard({ site, onHelp, actions }: { site: Site; onHelp: (i: Is
   return (
     <article className={`card card--${site.lane}`} aria-label={`${site.host}, ${LANE_LABEL[site.lane]}`}>
       <header className="card__head">
-        <h3 className="host">{site.host}</h3>
+        <h3 className="host"><Title href={site.href}>{site.host}</Title></h3>
         <StatusPill lane={site.lane} />
       </header>
-      <ComponentRow components={site.components} />
-      {site.issues.length > 0 && (
-        <ul className="issues">
-          {site.issues.map((i) => (
-            <li key={i.code}>
-              <span className="issues__text">{i.title}</span>
-              <button type="button" className="link" onClick={() => onHelp(i, site.host)}>Help me understand</button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <footer className="card__foot"><span>{ago(site.lastVerifiedAt, site.lastObservedAt)}</span></footer>
+      <StatusList components={site.components} />
+      <IssueList issues={site.issues} onHelp={(i) => onHelp(i, i.host ?? site.host)} showHost={(site.hosts?.length ?? 1) > 1} />
+      <footer className="card__foot">
+        <span>{ago(site.lastVerifiedAt, site.lastObservedAt)}</span>
+        {!!site.openRequests && <span>{plural(site.openRequests, 'open request')}</span>}
+      </footer>
       {actions && <div className="card__actions">{actions}</div>}
     </article>
   );
 }
 
-export function HealthBoard<T extends { lane: HealthLane; id: string }>({ items, render, noun }: {
-  items: T[]; render: (t: T) => React.ReactNode; noun: string;
+/** Lane filter chips: toggle lanes on and off; counts are totals before lane filtering. */
+export function LaneChips({ counts, selected, onChange }: {
+  counts: Record<HealthLane, number>; selected: HealthLane[]; onChange: (lanes: HealthLane[]) => void;
 }) {
   return (
+    <div className="chips" role="group" aria-label="Show health">
+      {LANES.map((l) => {
+        const on = selected.includes(l);
+        return (
+          <button key={l} type="button" className={`chip chip--${l}`} aria-pressed={on}
+            onClick={() => onChange(on ? selected.filter((x) => x !== l) : [...selected, l])}>
+            <span aria-hidden="true" className="chip__glyph">{GLYPH[l]}</span>{LANE_LABEL[l]} <span className="chip__n">{counts[l]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Health lanes: computed by monitoring, never draggable (AC-BRD-001.2). */
+export function HealthBoard<T extends { lane: HealthLane; id: string }>({ items, render, noun, lanes }: {
+  items: T[]; render: (t: T) => React.ReactNode; noun: string; lanes?: HealthLane[];
+}) {
+  const shown = lanes?.length ? LANES.filter((l) => lanes.includes(l)) : LANES;
+  return (
     <div className="board" role="list" aria-label={`${noun} by health`}>
-      {LANES.map((lane) => {
+      {shown.map((lane) => {
         const inLane = items.filter((i) => i.lane === lane);
         return (
           <section key={lane} className={`lane lane--${lane} ${inLane.length ? '' : 'lane--empty'}`} role="listitem" aria-label={`${LANE_LABEL[lane]}: ${inLane.length}`}>
@@ -154,20 +187,21 @@ export function SiteList({ sites, clients }: { sites: Site[]; clients?: Client[]
   const order = (l: HealthLane) => LANES.indexOf(l);
   const sorted = [...sites].sort((a, b) => order(a.lane) - order(b.lane) || a.host.localeCompare(b.host));
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Scrollable table">
       <table className="list">
         <thead>
           <tr><th scope="col">Website</th>{clients && <th scope="col">Client</th>}<th scope="col">Health</th>
-            <th scope="col">SSL</th><th scope="col">Backup</th><th scope="col">Last check</th></tr>
+            <th scope="col">Domain</th><th scope="col">SSL</th><th scope="col">Errors</th><th scope="col">Last check</th></tr>
         </thead>
         <tbody>
           {sorted.map((s) => (
             <tr key={s.id}>
-              <th scope="row" className="host">{s.host}</th>
+              <th scope="row" className="host"><Title href={s.href}>{s.host}</Title></th>
               {clients && <td>{name(s.clientId)}</td>}
               <td><StatusPill lane={s.lane} /></td>
-              <td className={`txt--${s.components.ssl.state}`}>{s.components.ssl.label}</td>
-              <td className={`txt--${s.components.backup.state}`}>{s.components.backup.label}</td>
+              {(['domain', 'ssl', 'errors'] as const).map((k) => (
+                <td key={k} className={`txt--${s.components[k].state}`}>{s.components[k].label}</td>
+              ))}
               <td className="num">{ago(s.lastVerifiedAt, s.lastObservedAt)}</td>
             </tr>
           ))}
@@ -177,44 +211,74 @@ export function SiteList({ sites, clients }: { sites: Site[]; clients?: Client[]
   );
 }
 
-/** Work queue: workflow lanes are separate from health and moved by a validated action, never by drag alone. */
-export function WorkBoard({ tickets, onMove, onOpen, canMove = true }: {
+/**
+ * Work queue (BRD-003). Workflow lanes are separate from health. A drag (mouse)
+ * or the "Move to" control (keyboard, touch) both REQUEST a move; the server
+ * validates it. While dragging, only lanes the workflow allows accept the card.
+ */
+export function WorkBoard({ tickets, onMove, onOpen, canMove = true, states = TICKET_STATES as readonly TicketState[] }: {
   tickets: Ticket[];
   onMove: (id: string, to: TicketState) => Promise<string | null> | string | null;
   onOpen?: (id: string) => void;
   canMove?: boolean;
+  states?: readonly TicketState[];
 }) {
   const [message, setMessage] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<Ticket | null>(null);
+  const [over, setOver] = useState<TicketState | null>(null);
+
+  async function move(t: Ticket, to: TicketState) {
+    if (!TRANSITIONS[t.state].includes(to)) {
+      setMessage(`Not moved: ${TICKET_LABELS[t.state]} can't move to ${TICKET_LABELS[to]}.`);
+      return;
+    }
+    setMessage(`Moving "${t.title}" to ${TICKET_LABELS[to]}…`);
+    const err = await onMove(t.id, to);
+    setMessage(err ? `Not moved: ${err}` : `Moved "${t.title}" to ${TICKET_LABELS[to]}.`);
+  }
+
   return (
     <>
       <p className="live" role="status" aria-live="polite">{message}</p>
       <div className="board board--work">
-        {TICKET_STATES.map((state) => {
+        {states.map((state) => {
           const inLane = tickets.filter((t) => t.state === state);
+          const allowed = dragging ? TRANSITIONS[dragging.state].includes(state) : false;
+          const dropClass = dragging && dragging.state !== state ? (allowed ? 'lane--drop-ok' : 'lane--drop-no') : '';
           return (
-            <section key={state} className={`lane ${inLane.length ? '' : 'lane--empty'}`} aria-label={`${TICKET_LABELS[state]}: ${inLane.length}`}>
+            <section key={state}
+              className={`lane ${inLane.length || dragging ? '' : 'lane--empty'} ${dropClass} ${over === state && allowed ? 'lane--drop-over' : ''}`}
+              aria-label={`${TICKET_LABELS[state]}: ${inLane.length}`}
+              onDragOver={(e) => { if (allowed) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(state); } }}
+              onDragLeave={() => setOver((o) => (o === state ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                const t = dragging; setDragging(null); setOver(null);
+                if (t && t.state !== state) void move(t, state);
+              }}>
               <h2 className="lane__title"><span>{TICKET_LABELS[state]}</span><span className="count">{inLane.length}</span></h2>
               <div className="lane__body">
                 {inLane.map((t) => (
-                  <article key={t.id} className="card ticket">
-                    <h3>{t.title}</h3>
+                  <article key={t.id} className={`card ticket ${dragging?.id === t.id ? 'ticket--dragging' : ''}`}
+                    draggable={canMove}
+                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; setDragging(t); }}
+                    onDragEnd={() => { setDragging(null); setOver(null); }}>
+                    <h3>{onOpen ? <button type="button" className="title-btn" onClick={() => onOpen(t.id)}>{t.title}</button> : t.title}</h3>
                     <p className="card__meta"><span className="host">{t.host}</span>{t.client ? `, ${t.client}` : ''}</p>
-                    <p className="card__meta">{t.assignee ? `Assigned to ${t.assignee}` : 'Unassigned'}{t.hasApproval ? ', approval recorded' : ''}</p>
-                    {onOpen && <button type="button" className="link" onClick={() => onOpen(t.id)}>Open request and quote</button>}
+                    <p className="card__meta">
+                      {t.assignee ? `Assigned to ${t.assignee}` : 'Unassigned'}
+                      {t.hasApproval ? ', approved' : t.hasQuote ? ', quote sent' : ''}
+                    </p>
                     {canMove && <label className="move">
                       <span>Move to</span>
-                      <select value="" onChange={async (e) => {
-                        const to = e.target.value as TicketState;
-                        const err = await onMove(t.id, to);
-                        setMessage(err ? `Not moved: ${err}` : `Moved "${t.title}" to ${TICKET_LABELS[to]}.`);
-                      }}>
+                      <select value="" onChange={(e) => void move(t, e.target.value as TicketState)}>
                         <option value="" disabled>Choose a stage</option>
                         {TRANSITIONS[t.state].map((to) => {
                           const check = canTransition(t.state, to, {
                             approvals: t.hasApproval ? [{ amountPaise: 0, expiresAt: new Date(Date.now() + 86_400_000), voided: false, paymentVerified: false }] : [],
                             verificationPassed: false,
                           });
-                          return <option key={to} value={to}>{TICKET_LABELS[to]}{check.ok ? '' : ' (blocked)'}</option>;
+                          return <option key={to} value={to}>{TICKET_LABELS[to]}{check.ok ? '' : ' (needs approval or verification)'}</option>;
                         })}
                       </select>
                     </label>}
@@ -249,7 +313,7 @@ export function HelpDialog({ issue, host, onClose }: { issue: Issue | null; host
           <h3>What can I check?</h3><ul>{h.checks.map((c) => <li key={c}>{c}</li>)}</ul>
           <h3>What should I do next?</h3><p>{h.next}</p>
         </>
-      ) : <p>No guide for this issue yet.</p>}
+      ) : <p>We don't have a plain-language guide for this result yet. The message below gives support the details.</p>}
       <h3>Message for support</h3>
       <p className="help__msg">{msg}</p>
       <div className="help__actions">

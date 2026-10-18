@@ -30,6 +30,20 @@ export const HELP: Record<string, HelpEntry> = {
     checks: ['Check that the nameservers at your registrar match your DNS provider', 'Ask whether DNS was changed recently'],
     next: 'Connect your DNS provider so Upfixy can compare the records directly.',
   },
+  HTTP_TIMEOUT: {
+    title: 'Website not responding',
+    meaning: 'Our check waited and the website never answered. To visitors the page keeps loading and then fails.',
+    causes: ['The server is down or overloaded', 'A firewall is blocking traffic', 'DNS points to the wrong server'],
+    checks: ['Open the site from your phone on mobile data', 'Ask your hosting provider whether the server is up'],
+    next: 'Contact your hosting provider with the message below. If DNS is also failing, fix DNS first.',
+  },
+  TLS_EXPIRED: {
+    title: 'SSL certificate has expired',
+    meaning: 'Browsers now show a full-page security warning, and most visitors will leave before reaching your site.',
+    causes: ['Automatic renewal failed', 'A manually bought certificate was not renewed'],
+    checks: ['Open the site and look for the "Not secure" warning'],
+    next: 'Renew the certificate today. Your hosting provider can usually do this in minutes.',
+  },
   MONITOR_STALE: {
     title: 'No recent readings',
     meaning: 'Upfixy hasn’t received a fresh result for this site recently, so its health is unknown. This doesn’t mean the site is down.',

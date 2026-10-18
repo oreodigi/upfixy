@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MfaController;
 use App\Http\Controllers\Api\QuoteController;
+use App\Http\Controllers\Api\SavedViewController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\WebsiteController;
 use App\Http\Controllers\Api\WorkspaceController;
@@ -63,11 +64,14 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::get('clients', [ClientController::class, 'index']);
         Route::post('clients', [ClientController::class, 'store']);
         Route::patch('clients/{client}', [ClientController::class, 'update'])->whereUuid('client');
+        Route::get('clients/{client}', [BoardController::class, 'client'])->whereUuid('client');
         Route::post('clients/{client}/assignments', [ClientController::class, 'assign'])->whereUuid('client');
+        Route::delete('clients/{client}/assignments/{user}', [ClientController::class, 'unassign'])->whereUuid(['client', 'user']);
 
         Route::get('websites', [WebsiteController::class, 'index']);
         Route::post('websites', [WebsiteController::class, 'store'])->middleware('throttle:60,1');
         Route::get('websites/{website}', [WebsiteController::class, 'show'])->whereUuid('website');
+        Route::get('websites/{website}/history', [WebsiteController::class, 'history'])->whereUuid('website');
 
         Route::get('websites/{website}/claims', [ClaimController::class, 'index'])->whereUuid('website');
         Route::post('websites/{website}/claims', [ClaimController::class, 'store'])->whereUuid('website')->middleware('throttle:20,1');
@@ -76,12 +80,20 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
 
         Route::get('boards/websites', [BoardController::class, 'websites']);
         Route::get('boards/clients', [BoardController::class, 'clients']);
+        Route::get('overview', [BoardController::class, 'overview']);
+
+        Route::get('views', [SavedViewController::class, 'index']);
+        Route::post('views', [SavedViewController::class, 'store'])->middleware('throttle:30,1');
+        Route::patch('views/{view}', [SavedViewController::class, 'update'])->whereUuid('view');
+        Route::delete('views/{view}', [SavedViewController::class, 'destroy'])->whereUuid('view');
 
         Route::get('actions', [QuoteController::class, 'catalog']);
         Route::get('tickets', [TicketController::class, 'index']);
         Route::post('tickets', [TicketController::class, 'store']);
         Route::get('tickets/{ticket}', [TicketController::class, 'show'])->whereUuid('ticket');
         Route::post('tickets/{ticket}/transition', [TicketController::class, 'transition'])->whereUuid('ticket');
+        Route::get('tickets/{ticket}/assignable', [TicketController::class, 'assignable'])->whereUuid('ticket');
+        Route::patch('tickets/{ticket}/assignee', [TicketController::class, 'assign'])->whereUuid('ticket');
         Route::post('tickets/{ticket}/quotes', [QuoteController::class, 'store'])->whereUuid('ticket');
         Route::post('quotes/{quote}/void', [QuoteController::class, 'void'])->whereUuid('quote');
         Route::post('tickets/{ticket}/approvals', [QuoteController::class, 'approve'])->whereUuid('ticket');

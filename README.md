@@ -1,6 +1,6 @@
 # Upfixy
 
-Website diagnostics and resolution SaaS for solo owners, agencies and hosting providers. This repository is the **local development build of milestone M1** (tenant foundation, hardened): a Laravel API on PostgreSQL row-level security, shared health and workflow rules, and a React web app.
+Website diagnostics and resolution SaaS for solo owners, agencies and hosting providers. This repository is the **local development build through milestone M2** (hardened tenant foundation, boards and UX): a Laravel API on PostgreSQL row-level security, shared health and workflow rules, and a React web app.
 
 Requirements: *Upfixy MVP FRD v0.2.1*. Nothing here is deployed or connected to any real server, provider account or payment gateway. This repo is independent of Gods Eye: it has its own database, roles and code, and holds no credentials.
 
@@ -10,11 +10,16 @@ Requirements: *Upfixy MVP FRD v0.2.1*. Nothing here is deployed or connected to 
 | --- | --- | --- |
 | `db/migrations/` | PostgreSQL 16 schema, the single source of truth: tenancy, websites, ownership proof, delegations, tickets, quotes, approvals, invitations, audit and **row-level security** on every tenant table | 75 (as the app and worker roles) |
 | `db/bootstrap/roles.sql` | Creates the three database roles with least privilege (run once per environment) | |
-| `api/` | Laravel 12 API: auth with MFA, email verification, invitations, team, clients, websites, ownership verification, boards, tickets, quotes, approvals | 107 |
+| `api/` | Laravel 12 API: auth with MFA, email verification, invitations, team, clients, websites, ownership verification, boards, tickets, quotes, approvals | 118 |
 | `packages/core/` | Shared rules in TypeScript: URL/SSRF guard, health and client roll-up, incident debounce, ticket state machine | 169 |
 | `packages/core/vectors/` | JSON test cases that **both** the TypeScript and PHP implementations must pass | (used by both) |
-| `web/` | React + TypeScript (Vite): sign-up and two-step sign-in, email confirmation, security settings, team and invitations, ownership verification, quotes and approval, boards, work queue. Add `?demo` for the synthetic demo board | 8 |
+| `web/` | React + TypeScript (Vite): real URLs for every screen; overview, client and website boards with search, lane filters and saved views, client detail, website detail (8 tabs, reading history), work queue (drag or keyboard), assignment, sign-in with MFA, team, ownership proof, quotes. Add `?demo` for the synthetic demo board | 22 |
 | `scripts/e2e.py` | 38 end-to-end checks against the running servers | |
+| `scripts/seed-dev.mjs` | Dev-only demo data (refuses non-local databases). `--sites 200` adds a load-test workspace | |
+| `scripts/screens.mjs` | Screenshots at 390 px and 1440 px, page-overflow check and axe WCAG 2.1 AA audit; exits 1 on serious findings | 16 screens × 2 |
+| `scripts/keyboard.mjs` | Keyboard-only checks: skip link, navigation, moving and opening requests, dialogs, filters, Back button, deep links | 22 |
+| `scripts/perf.mjs` | API median/p95 and board render time on throttled phone (Fast 4G, 4× CPU) | |
+| `.github/workflows/ci.yml` | Every suite on push and PR, with a throwaway PostgreSQL | |
 
 ## Run it locally
 
@@ -32,6 +37,8 @@ npm run api             # API on http://127.0.0.1:8000
 npm run dev             # web app on http://127.0.0.1:5173 (proxies /api to :8000)
 npm test                # everything: core, database, web, API
 python3 -I scripts/e2e.py   # optional: 38 end-to-end checks against the running servers
+node scripts/seed-dev.mjs   # demo data: owner@ / tech@ / client@demo.upfixy.test, password demo-password-123
+node scripts/screens.mjs /tmp/shots && node scripts/keyboard.mjs   # visual, accessibility and keyboard checks
 ```
 
 Email goes to `api/storage/logs/laravel.log` in development (`MAIL_MAILER=log`).
@@ -58,12 +65,13 @@ All workspace routes take an `X-Workspace-Id` header. A workspace you don't belo
 | `GET/POST workspaces` | Switcher list, create | |
 | `GET members`, `PATCH members/{user}` | Team list; change role, remove or restore access | Step-up. Can't remove the last owner; only owners change owners |
 | `GET/POST invitations`, `POST invitations/{id}/revoke`, `POST invitations/accept` | Email invitations | Step-up. Never reveals whether an email has an account. Accepting needs the same, verified email |
-| `GET/POST clients`, `PATCH clients/{id}`, `POST clients/{id}/assignments` | Clients and assignments | Changing `agency_may_pay` needs the owner, with step-up |
-| `GET/POST websites`, `GET websites/{id}` | Add by URL, no credentials | Public monitoring needs no proof (D-07) |
+| `GET/POST clients`, `GET/PATCH clients/{id}`, `POST clients/{id}/assignments`, `DELETE clients/{id}/assignments/{user}` | Clients, detail (staff, client users, settings), assignments | Changing `agency_may_pay` needs the owner, with step-up. Removing a technician unassigns their open requests for that client |
+| `GET/POST websites`, `GET websites/{id}`, `GET websites/{id}/history` | Add by URL; detail; reading history | Public monitoring needs no proof (D-07). Private readings stay hidden until ownership is proven |
 | `GET/POST websites/{id}/claims`, `POST claims/{id}/check`, `POST claims/{id}/revoke` | DNS TXT / HTML-file ownership proof | Checked by the worker; revoke needs step-up |
-| `GET boards/websites`, `GET boards/clients` | Health lanes computed on the server | |
+| `GET boards/websites`, `GET boards/clients`, `GET overview` | Health lanes computed on the server; what needs attention now | |
+| `GET/POST views`, `PATCH/DELETE views/{id}` | Saved board filters | Personal to each user; up to 20 per board |
 | `GET actions` | Service catalogue (draft prices, D-08 open) | |
-| `GET/POST tickets`, `GET tickets/{id}`, `POST tickets/{id}/transition` | Work queue, versioned moves | |
+| `GET/POST tickets`, `GET tickets/{id}`, `POST tickets/{id}/transition`, `GET tickets/{id}/assignable`, `PATCH tickets/{id}/assignee` | Work queue, versioned moves, assignment | Technicians only take or drop their own; assignees must be active staff on that client (enforced in the database) |
 | `POST tickets/{id}/quotes`, `POST quotes/{id}/void` | Immutable quote for one address and one allowlisted action | Staff only; price from the catalogue |
 | `POST tickets/{id}/approvals` | Payer approves `{quote_id, fingerprint}` | Paid quotes need step-up |
 
@@ -112,6 +120,9 @@ The database enforces, independent of the API code:
 | AC-SVC-001.1 stale version → 409 | `BoardAndTicketTest`, `db/test` |
 | AC-SVC-003.2 / .3 / .4 approval expiry, ₹0 approval, payer rule | `QuoteApprovalTest`, core, `db/test/hardening` |
 | D-17 healthy + unknown → Unknown | shared vectors |
+| AC-BRD-002.1 a one-site workspace gets a single-site view, not empty lanes | `scripts/screens.mjs` (solo) |
+| AC-BRD-004.1 search never surfaces names the user can't see (filters run on RLS-filtered data) | web `router-filters.test.ts`, `BoardsM2Test` |
+| M2 exit: health separate from work; mobile and keyboard verified | `scripts/screens.mjs` (0 px overflow, 0 serious axe findings), `scripts/keyboard.mjs` |
 
 ## Known gaps (next steps)
 
@@ -122,4 +133,6 @@ The database enforces, independent of the API code:
 - **MFA lockout.** Code guessing is rate-limited (6 per minute per endpoint) and challenge tokens expire after 5 minutes, but there's no account lockout or alerting yet.
 - **RLS scope.** Row-level security protects against application bugs. It can't stop arbitrary SQL run as `upfixy_app`, which could set its own context. Parameterised queries are the control for that.
 - **Connectors (M4)** need pilot test accounts; delegation grants come with them.
-- **Visual review.** Screenshots weren't possible in the build environment. Review the web app in a browser, including on a phone.
+- **Large boards.** With 200 websites the Websites board renders in about 2.2 s on a throttled phone (production build). Beyond a few hundred, virtualise the lanes.
+- **Client self-service add.** The database already lets a client owner add websites when the agency enables it (D-09); the web app doesn't show the button to them yet.
+- **Real-device check.** Screens are verified in headless Chromium at phone and desktop widths. Test on a real phone with a screen reader before pilot.

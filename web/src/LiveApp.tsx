@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { TicketState } from '@upfixy/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, session, type ApiClient, type ApiMe, type ApiSite, type ApiTicket, type ApiWorkspace } from './api';
-import { toClient, toSite } from './live-mapping';
-import type { Issue, Ticket } from './demo-data';
-import { ClientCard, SiteCard, HealthBoard, SiteList, WorkBoard, HelpDialog } from './components';
+import { Ctx, type WorkspaceCtx } from './app-context';
+import type { Issue } from './demo-data';
+import { HelpDialog } from './components';
 import { EmailBanner, LinkLanding, OwnershipDialog, SecurityPanel, StepUpDialog, TeamPanel, TicketDialog } from './secure';
-
-type View = 'clients' | 'websites' | 'work' | 'team' | 'security';
+import { navigate, onLinkClick, useRoute, type Route } from './router';
+import Overview from './pages/Overview';
+import { ClientsBoard, WebsitesBoard } from './pages/Boards';
+import ClientDetail from './pages/ClientDetail';
+import WebsiteDetail from './pages/WebsiteDetail';
+import Work from './pages/Work';
 
 const PENDING_INVITE = 'upfixy.pendingInvite';
 const store = {
@@ -131,19 +134,21 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
   );
 }
 
+type NavItem = { to: string; label: string; match: Route['name'][]; icon: string };
+
 function Workspace({ onSignOut }: { onSignOut: () => void }) {
+  const route = useRoute();
   const [workspaces, setWorkspaces] = useState<ApiWorkspace[]>([]);
   const [me, setMe] = useState<ApiMe | null>(null);
   const [ws, setWs] = useState<string | null>(session.workspace());
-  const [view, setView] = useState<View>('websites');
-  const [mode, setMode] = useState<'board' | 'list'>('board');
   const [clients, setClients] = useState<ApiClient[]>([]);
   const [sites, setSites] = useState<ApiSite[]>([]);
   const [tickets, setTickets] = useState<ApiTicket[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [help, setHelp] = useState<{ issue: Issue; host: string } | null>(null);
   const [verifySite, setVerifySite] = useState<{ id: string; name: string } | null>(null);
-  const [openTicket, setOpenTicket] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
 
   const current = workspaces.find((w) => w.id === ws);
   const role = current?.role ?? '';
@@ -161,205 +166,142 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
         setWorkspaces(r.data);
         const pick = r.data.find((w) => w.id === ws)?.id ?? r.data[0]?.id ?? null;
         session.setWorkspace(pick); setWs(pick);
-        if (r.data.find((w) => w.id === pick)?.kind === 'agency') setView('clients');
       })
       .catch((e) => (e instanceof ApiError && e.status === 401 ? onSignOut() : setError(e.message)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const load = useCallback(async () => {
-    if (!ws) return;
+  const reload = useCallback(async () => {
+    if (!ws || !current) return;
     setError(null);
     try {
-      const [s, t] = await Promise.all([
+      const [s, t, c] = await Promise.all([
         api<{ data: ApiSite[] }>('GET', 'boards/websites'),
         api<{ data: ApiTicket[] }>('GET', 'tickets'),
+        current.kind === 'agency' ? api<{ data: ApiClient[] }>('GET', 'boards/clients') : Promise.resolve({ data: [] as ApiClient[] }),
       ]);
-      setSites(s.data); setTickets(t.data);
-      if (isAgency) setClients((await api<{ data: ApiClient[] }>('GET', 'boards/clients')).data);
+      setSites(s.data); setTickets(t.data); setClients(c.data);
+      setLoaded(true);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) { session.setWorkspace(null); window.location.reload(); return; } // access removed
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [ws, isAgency]);
+  }, [ws, current]);
+  useEffect(() => { void reload(); }, [reload]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  const onMove = async (id: string, to: TicketState) => {
-    const t = tickets.find((x) => x.id === id)!;
-    try {
-      await api('POST', `tickets/${id}/transition`, { to, version: t.version });
-      await load();
-      return null;
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) await load();
-      return e instanceof Error ? e.message : String(e);
-    }
-  };
-
-  async function report(siteId: string, host: string) {
+  const openTicket = useCallback((id: string) => navigate({ name: 'work', ticket: id }), []);
+  const report = useCallback(async (siteId: string, host: string) => {
     const title = window.prompt(`What's wrong with ${host}? Describe it in a few words.`);
     if (!title?.trim()) return;
     try {
       const r = await api<{ id: string }>('POST', 'tickets', { website_id: siteId, title: title.trim() });
-      await load();
-      setView('work');
-      setOpenTicket(r.id);
+      await reload();
+      openTicket(r.id);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-  }
+  }, [reload, openTicket]);
 
-  const workTickets: Ticket[] = tickets.map((t) => ({
-    id: t.id, title: t.title, host: t.website, client: '', state: t.state, assignee: null, hasApproval: false,
-  }));
-  const views: Array<{ id: View; label: string }> = [
-    ...(isAgency ? [{ id: 'clients' as View, label: 'Clients' }] : []),
-    { id: 'websites', label: 'Websites' },
-    { id: 'work', label: isAgency ? 'Work queue' : 'Issues' },
-    ...(canManageTeam ? [{ id: 'team' as View, label: 'Team' }] : []),
-    { id: 'security', label: 'Security' },
+  const ctx: WorkspaceCtx = useMemo(() => ({
+    me, workspace: current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, reload,
+    openHelp: (issue, host) => setHelp({ issue, host }),
+    openVerify: setVerifySite, openTicket, report: (id, host) => void report(id, host), setError,
+  }), [me, current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, reload, openTicket, report]);
+
+  const primary: NavItem[] = [
+    { to: '/', label: 'Overview', match: ['overview'], icon: '◎' },
+    ...(isAgency ? [{ to: '/clients', label: 'Clients', match: ['clients', 'client'] as Route['name'][], icon: '▦' }] : []),
+    { to: '/websites', label: 'Websites', match: ['websites', 'website'], icon: '◱' },
+    ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work' : 'Requests', match: ['work'] as Route['name'][], icon: '☰' }] : []),
   ];
-  const siteModels = sites.map(toSite);
-  const clientModels = clients.map(toClient);
-  const siteActions = (siteId: string, host: string) => (
-    <>
-      {canVerify && <button type="button" className="link" onClick={() => setVerifySite({ id: siteId, name: host })}>Verify ownership</button>}
-      {role !== 'billing' && <button type="button" className="link" onClick={() => void report(siteId, host)}>Report a problem</button>}
-    </>
+  const secondary: NavItem[] = [
+    ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
+    { to: '/security', label: 'Security', match: ['security'], icon: '🔒' },
+  ];
+  const isOn = (n: NavItem) => n.match.includes(route.name);
+  const link = (n: NavItem, cls: string) => (
+    <a key={n.to} href={n.to} className={cls} aria-current={isOn(n) ? 'page' : undefined}
+      onClick={(e) => { onLinkClick(e); setMore(false); }}>
+      <span className="nav__icon" aria-hidden="true">{n.icon}</span><span className="nav__label">{n.label}</span>
+    </a>
   );
 
+  const switcher = workspaces.length > 1 ? (
+    <label className="ws-switch">
+      <span className="sr-only">Workspace</span>
+      <select value={ws ?? ''} onChange={(e) => {
+        // Drop everything from the previous workspace before loading the next (AC-ACC-004.1).
+        setClients([]); setSites([]); setTickets([]); setLoaded(false); setVerifySite(null); setHelp(null); setMore(false);
+        session.setWorkspace(e.target.value); setWs(e.target.value);
+        navigate('/', { replace: true });
+      }}>
+        {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+      </select>
+    </label>
+  ) : <p className="top__ws">{current?.name ?? 'Loading…'}</p>;
+
+  // Pages a role can't use fall back to the overview rather than an empty screen.
+  const r = route;
+  const blocked = (r.name === 'clients' || r.name === 'client') && !isAgency
+    || r.name === 'team' && !canManageTeam
+    || r.name === 'work' && role === 'billing';
+
   return (
-    <div className="app">
-      <StepUpDialog />
-      <header className="top">
-        <div className="top__brand">
-          <span className="logo" aria-hidden="true">U</span>
-          <div>
-            <p className="top__name">Upfixy</p>
-            {workspaces.length > 1 ? (
-              <label className="ws-switch">
-                <span className="sr-only">Workspace</span>
-                <select value={ws ?? ''} onChange={(e) => {
-                  // Drop everything from the previous workspace before loading the next (AC-ACC-004.1).
-                  setClients([]); setSites([]); setTickets([]); setOpenTicket(null); setVerifySite(null);
-                  session.setWorkspace(e.target.value); setWs(e.target.value);
-                }}>
-                  {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
-              </label>
-            ) : <p className="top__ws">{current?.name ?? 'Loading…'}</p>}
+    <Ctx.Provider value={ctx}>
+      <div className="app">
+        <a className="skip" href="#main">Skip to content</a>
+        <StepUpDialog />
+        <header className="top">
+          <div className="top__brand">
+            <span className="logo" aria-hidden="true">U</span>
+            <div><p className="top__name">Upfixy</p>{switcher}</div>
           </div>
-        </div>
-        <nav aria-label="Main" className="tabs">
-          {views.map((v) => (
-            <button key={v.id} type="button" className="tab" aria-current={view === v.id ? 'page' : undefined} onClick={() => setView(v.id)}>{v.label}</button>
-          ))}
-          <button type="button" className="tab" onClick={onSignOut}>Sign out</button>
+          <nav aria-label="Main" className="nav nav--top">
+            {[...primary, ...secondary].map((n) => link(n, 'tab'))}
+            <button type="button" className="tab" onClick={onSignOut}>Sign out</button>
+          </nav>
+        </header>
+        <EmailBanner me={me} />
+
+        <main className="main" id="main" tabIndex={-1}>
+          {error && <p className="error" role="alert">{error}</p>}
+          {!current ? <p className="hint" role="status">Loading…</p>
+            : blocked || r.name === 'not_found' ? <NotFound />
+            : r.name === 'overview' ? <Overview />
+            : r.name === 'clients' ? <ClientsBoard />
+            : r.name === 'client' ? <ClientDetail id={r.id} />
+            : r.name === 'websites' ? <WebsitesBoard />
+            : r.name === 'website' ? <WebsiteDetail id={r.id} tab={r.tab} />
+            : r.name === 'work' ? <Work />
+            : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
+            : r.name === 'security' ? (me ? <SecurityPanel me={me} onChange={() => void loadMe()} /> : null)
+            : null}
+        </main>
+
+        <nav aria-label="Main" className="nav nav--bottom">
+          {primary.map((n) => link(n, 'bnav'))}
+          <button type="button" className="bnav" aria-expanded={more} aria-controls="more-sheet" onClick={() => setMore(!more)}
+            aria-current={secondary.some(isOn) ? 'page' : undefined}>
+            <span className="nav__icon" aria-hidden="true">⋯</span><span className="nav__label">More</span>
+          </button>
         </nav>
-      </header>
-      <EmailBanner me={me} />
-
-      <main className="main">
-        {error && <p className="error" role="alert">{error}</p>}
-        {view === 'security' && me && <SecurityPanel me={me} onChange={() => void loadMe()} />}
-        {view === 'team' && <TeamPanel clients={clients} myRole={role} />}
-
-        {view === 'clients' && isStaff && <AddClient onAdded={load} />}
-        {(view === 'clients' || view === 'websites') && <AddWebsite clients={isAgency ? clients : []} onAdded={load} />}
-
-        {(view === 'clients' || view === 'websites') && (
-          <div className="toolbar">
-            <button type="button" className="btn btn--quiet" onClick={() => void load()}>Refresh readings</button>
-            <span className="hint">Shows the latest stored results. Live re-checks arrive with the monitoring worker.</span>
-            <div className="seg" role="group" aria-label="Layout">
-              <button type="button" aria-pressed={mode === 'board'} onClick={() => setMode('board')}>Board</button>
-              <button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>List</button>
+        {more && (
+          <div className="sheet" id="more-sheet" role="dialog" aria-label="More" onKeyDown={(e) => e.key === 'Escape' && setMore(false)}>
+            <div className="sheet__inner">
+              {workspaces.length > 1 && <div className="sheet__ws">{switcher}</div>}
+              {secondary.map((n) => link(n, 'sheet__item'))}
+              <button type="button" className="sheet__item" onClick={onSignOut}><span className="nav__icon" aria-hidden="true">↪</span><span className="nav__label">Sign out</span></button>
+              <button type="button" className="btn btn--quiet" onClick={() => setMore(false)} autoFocus>Close</button>
             </div>
           </div>
         )}
 
-        {view === 'clients' && (clientModels.length === 0
-          ? <Empty text="No clients yet. Clients group the websites you look after for one customer." />
-          : mode === 'board'
-            ? <HealthBoard items={clientModels} noun="Clients" render={(c) => <ClientCard client={c} onHelp={(issue, host) => setHelp({ issue, host })} />} />
-            : <SiteList sites={clientModels.flatMap((c) => c.sites)} clients={clientModels} />)}
-        {view === 'websites' && (siteModels.length === 0
-          ? <Empty text="Add your first website above. No passwords or hosting details needed for basic monitoring." />
-          : mode === 'board'
-            ? <HealthBoard items={siteModels} noun="Websites" render={(s) => (
-                <SiteCard site={s} onHelp={(issue, host) => setHelp({ issue, host })} actions={siteActions(s.id, s.host)} />)} />
-            : <SiteList sites={siteModels} clients={isAgency ? clientModels : undefined} />)}
-        {view === 'work' && (workTickets.length === 0
-          ? <Empty text="No open requests. Use “Report a problem” on a website to start one." />
-          : <WorkBoard tickets={workTickets} onMove={onMove} onOpen={setOpenTicket} canMove={isStaff} />)}
-      </main>
-      <HelpDialog issue={help?.issue ?? null} host={help?.host ?? ''} onClose={() => setHelp(null)} />
-      <OwnershipDialog websiteId={verifySite?.id ?? null} name={verifySite?.name ?? ''} onClose={() => setVerifySite(null)} />
-      <TicketDialog ticketId={openTicket} role={role} onClose={() => setOpenTicket(null)} onChanged={() => void load()} />
-    </div>
+        <HelpDialog issue={help?.issue ?? null} host={help?.host ?? ''} onClose={() => setHelp(null)} />
+        <OwnershipDialog websiteId={verifySite?.id ?? null} name={verifySite?.name ?? ''} onClose={() => { setVerifySite(null); void reload(); }} />
+        <TicketDialog ticketId={r.name === 'work' ? r.ticket ?? null : null} role={role} meId={me?.id ?? null}
+          onClose={() => navigate('/work', { replace: true })} onChanged={() => void reload()} />
+      </div>
+    </Ctx.Provider>
   );
 }
 
-function AddWebsite({ clients, onAdded }: { clients: ApiClient[]; onAdded: () => void }) {
-  const [url, setUrl] = useState('');
-  const [client, setClient] = useState('');
-  const [msg, setMsg] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const r = await api<{ target: { scheme: string; host: string; path: string }; note: string | null }>(
-        'POST', 'websites', { url, client_id: client || null });
-      setMsg({ kind: 'ok', text: `Added ${r.target.host}. First checks will appear once monitoring runs.${r.note ? ' ' + r.note : ''}` });
-      setUrl('');
-      onAdded();
-    } catch (err) {
-      setMsg({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  return (
-    <form className="add" onSubmit={submit}>
-      <label className="field add__url">Add a website
-        <input inputMode="url" placeholder="shop.example.com" required value={url} onChange={(e) => setUrl(e.target.value)} />
-      </label>
-      {clients.length > 0 && (
-        <label className="field">Client
-          <select value={client} onChange={(e) => setClient(e.target.value)}>
-            <option value="">No client</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-      )}
-      <button className="btn">Add website</button>
-      {msg && <p className={msg.kind === 'error' ? 'error' : 'ok'} role={msg.kind === 'error' ? 'alert' : 'status'}>{msg.text}</p>}
-    </form>
-  );
-}
-
-function AddClient({ onAdded }: { onAdded: () => void }) {
-  const [name, setName] = useState('');
-  const [msg, setMsg] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await api('POST', 'clients', { name });
-      setMsg({ kind: 'ok', text: `Added client ${name}.` });
-      setName('');
-      onAdded();
-    } catch (err) {
-      setMsg({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
-    }
-  }
-  return (
-    <form className="add" onSubmit={submit}>
-      <label className="field add__url">Add a client
-        <input placeholder="Company name" required maxLength={160} value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
-      <button className="btn">Add client</button>
-      {msg && <p className={msg.kind === 'error' ? 'error' : 'ok'} role={msg.kind === 'error' ? 'alert' : 'status'}>{msg.text}</p>}
-    </form>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="empty">{text}</p>;
+function NotFound() {
+  return <div className="page"><h1>Page not found</h1><p>This page doesn't exist or isn't available to your role. <a href="/" onClick={onLinkClick}>Go to the overview</a></p></div>;
 }

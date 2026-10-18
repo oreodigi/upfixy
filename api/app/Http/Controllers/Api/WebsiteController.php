@@ -24,15 +24,46 @@ class WebsiteController
               GROUP BY w.id ORDER BY w.display_name")]);
     }
 
+    /** SCR-07 website detail: targets, latest readings, ownership, requests. */
     public function show(string $website): JsonResponse
     {
-        $row = DB::selectOne('SELECT id, display_name, client_id, created_at FROM websites WHERE id = ?', [$website]);
+        $row = DB::selectOne(
+            'SELECT w.id, w.display_name, w.client_id, c.name AS client_name, w.created_at
+               FROM websites w LEFT JOIN clients c ON c.id = w.client_id WHERE w.id = ?', [$website]);
         if (!$row) abort(404);
         $row->targets = DB::select(
-            "SELECT id, host, state, scheme || '://' || host ||
+            "SELECT id, host, state, interval_seconds, scheme || '://' || host ||
                     CASE WHEN (scheme = 'https' AND port = 443) OR (scheme = 'http' AND port = 80) THEN '' ELSE ':' || port END || path AS url
                FROM monitor_targets WHERE website_id = ? ORDER BY host", [$website]);
+        $status = \App\Domain\SiteStatus::rows($website)[0] ?? null;
+        $row->lane = $status['lane'] ?? 'needs_setup';
+        $row->last_verified_at = $status['last_verified_at'] ?? null;
+        $row->checks = $status['checks'] ?? [];
+        $row->coverage = $status['coverage'] ?? null;
+        $row->verified_hosts = $status['verified_hosts'] ?? [];
+        $row->requests = DB::select(
+            "SELECT t.id, t.title, t.state, t.updated_at FROM tickets t WHERE t.website_id = ?
+              ORDER BY (t.state IN ('resolved', 'closed')), t.updated_at DESC LIMIT 20", [$website]);
         return response()->json($row);
+    }
+
+    /** Reading history, newest first (SCR-07 Activity). Private readings follow ownership proof (RLS). */
+    public function history(Request $request, string $website): JsonResponse
+    {
+        $data = $request->validate([
+            'kind' => ['nullable', 'in:http,tls,dns'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:200'],
+        ]);
+        if (!DB::selectOne('SELECT 1 AS x FROM websites WHERE id = ?', [$website])) abort(404);
+        $args = [$website];
+        $kind = '';
+        if (!empty($data['kind'])) { $kind = 'AND o.check_kind = ?::check_type'; $args[] = $data['kind']; }
+        $args[] = $data['limit'] ?? 50;
+        return response()->json(['data' => DB::select(
+            "SELECT o.observed_at, t.host, o.check_kind::text AS kind, o.severity::text AS severity,
+                    o.source::text AS source, o.result_code
+               FROM observations o JOIN monitor_targets t ON t.id = o.monitor_target_id
+              WHERE t.website_id = ? {$kind} ORDER BY o.observed_at DESC LIMIT ?", $args)]);
     }
 
     public function store(Request $request): JsonResponse
