@@ -230,3 +230,20 @@ export interface ApiProviderLink {
   asset_id: string; provider: ConnectorKind; asset_kind: 'zone' | 'account' | 'domain'; name: string;
   facts: Record<string, any> | null; private_access: boolean; last_seen_at: string; stale: boolean; stale_reason: string | null;
 }
+
+// ----------------------------------------------------------------- M6 types
+export type PaymentStatus = 'created' | 'pending' | 'paid_verified' | 'failed' | 'refunded' | 'partially_refunded';
+export interface ApiPaymentOrder {
+  id: string; quote_id: string; approval_id: string; amount_paise: number; currency: string; mode: 'test' | 'live'; merchant_name: string;
+  status: PaymentStatus; status_reason: string | null; client_reported_at: string | null; refunded_paise: number; created_at: string; paid_at: string | null;
+  receipt: { id: string; number: string; issued_at: string; is_tax_invoice: boolean; tax_note: string } | null;
+  refunds: Array<{ id: string; amount_paise: number; reason: string; status: string; requested_at: string; processed_at: string | null }>;
+}
+export interface ApiMerchant {
+  merchant: { legal_name: string; gstin: string | null; state_code: string | null; receipt_prefix: string; mode: 'test' | 'live'; razorpay_key_id: string; updated_at: string } | null;
+  live_allowed: boolean; live_note: string; webhook_url: string;
+}
+export interface ApiCoverage {
+  id: string; client_id: string | null; client: string | null; website_id: string | null; website: string | null; reference: string; scope: string;
+  valid_from: string; valid_until: string; revoked_at: string | null; active: boolean;
+}

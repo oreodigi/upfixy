@@ -63,6 +63,13 @@ return [
         'lease_seconds' => 120,
     ],
 
+    // M6 payments. LIVE charging stays off until D-05/06/13/14/18/23 are signed (also locked in the database).
+    'payments' => [
+        'live' => (bool) env('UPFIXY_PAYMENTS_LIVE', false),
+        'razorpay_base' => env('UPFIXY_RAZORPAY_BASE', 'https://api.razorpay.com/v1'),
+        'reconcile_after_seconds' => 600,
+    ],
+
     // M7 controlled repairs (FIX-003..005). Three switches must all allow a write:
     // this flag (default OFF), the global DB kill switch (starts paused) and the workspace switch.
     'repairs' => [

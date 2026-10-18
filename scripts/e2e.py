@@ -121,8 +121,16 @@ call('POST', f'tickets/{ticket}/transition', {'to': 'investigating', 'version': 
 s, r = call('GET', f'websites/{site}', None, tok, ws); target = r['targets'][0]['id']
 s, q = call('POST', f'tickets/{ticket}/quotes', {'monitor_target_id': target, 'action_code': 'dns.record_fix', 'description': 'Fix the A record', 'amount_paise': 1}, tok, ws)
 check('quote price comes from the catalogue (₹100), not the request', s == 201 and q['amount_paise'] == 10000, q)
-s, q = call('POST', f'tickets/{ticket}/quotes', {'monitor_target_id': target, 'action_code': 'provider.covered_fix', 'description': 'Renew certificate under hosting contract'}, tok, ws)
-check('replacement ₹0 quote issued', s == 201 and q['amount_paise'] == 0)
+free = {'monitor_target_id': target, 'action_code': 'provider.covered_fix', 'description': 'Renew certificate under hosting contract'}
+s, r = call('POST', f'tickets/{ticket}/quotes', free, tok, ws)
+check('₹0 quote refused without a coverage contract', s == 422 and r.get('code') == 'coverage_required', r)
+import datetime
+today = datetime.date.today()
+s, r = call('POST', 'billing/coverage', {'client_id': client, 'reference': 'AMC-E2E', 'scope': 'Hosting AMC',
+            'valid_from': str(today), 'valid_until': str(today + datetime.timedelta(days=365))}, tok, ws)
+check('owner records the client\'s coverage contract', s == 201, r)
+s, q = call('POST', f'tickets/{ticket}/quotes', free, tok, ws)
+check('replacement ₹0 quote issued under that contract', s == 201 and q['amount_paise'] == 0, q)
 call('POST', f'tickets/{ticket}/transition', {'to': 'quote_pending', 'version': 2}, tok, ws)
 s, r = call('POST', f'tickets/{ticket}/approvals', {'quote_id': q['id'], 'fingerprint': q['fingerprint']}, carl_tok, ws)
 check('approval refused while ownership is unverified', s == 422 and 'Verify ownership' in r['message'], r)

@@ -12,6 +12,7 @@ export type Route =
   | { name: 'settings' }
   | { name: 'alerts' }
   | { name: 'integrations' }
+  | { name: 'billing' }
   | { name: 'integration'; id: string }
   | { name: 'diagnostic'; id: string }
   | { name: 'not_found' };
@@ -31,6 +32,7 @@ export function parse(path: string, search = ''): Route {
   if (p === '/team') return { name: 'team' };
   if (p === '/alerts') return { name: 'alerts' };
   if (p === '/integrations') return { name: 'integrations' };
+  if (p === '/billing') return { name: 'billing' };
   if ((m = p.match(new RegExp(`^/integrations/(${UUID})$`)))) return { name: 'integration', id: m[1] };
   if ((m = p.match(new RegExp(`^/diagnostics/(${UUID})$`)))) return { name: 'diagnostic', id: m[1] };
   if (p === '/settings' || p === '/security') return { name: 'settings' };

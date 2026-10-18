@@ -155,6 +155,16 @@ abstract class TestCase extends BaseTestCase
         foreach (['http', 'tls', 'dns'] as $k) $this->observe($ws, $target, $k, $severity, $minutesAgo);
     }
 
+    /** An active coverage contract (needed for ₹0 provider-covered quotes, M6). */
+    protected function cover(string $ws, ?string $client, ?string $site = null): string
+    {
+        $by = $this->owner()->selectOne("SELECT user_id FROM memberships WHERE workspace_id = ? ORDER BY role = 'owner' DESC LIMIT 1", [$ws])->user_id;
+        return $this->owner()->selectOne(
+            "INSERT INTO coverage_contracts(workspace_id, client_id, website_id, reference, scope, valid_from, valid_until, created_by)
+             VALUES (?, ?, ?, 'AMC-TEST-1', 'Hosting support contract', current_date - 30, current_date + 335, ?) RETURNING id",
+            [$ws, $client, $site, $by])->id;
+    }
+
     protected function makeTicket(string $ws, string $site, string ...$states): string
     {
         $id = $this->owner()->selectOne("INSERT INTO tickets(workspace_id, website_id, title) VALUES (?, ?, 'test') RETURNING id", [$ws, $site])->id;

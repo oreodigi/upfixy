@@ -1,5 +1,6 @@
 import { RepairControls } from './pages/Repairs';
 import { Integration, Integrations } from './pages/Integrations';
+import Billing from './pages/Billing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, session, type ApiClient, type ApiMe, type ApiSite, type ApiTicket, type ApiWorkspace } from './api';
 import { Ctx, type WorkspaceCtx } from './app-context';
@@ -239,6 +240,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const secondary: NavItem[] = [
     { to: '/alerts', label: unread ? `Alerts (${unread})` : 'Alerts', match: ['alerts'], icon: '🔔' },
     ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
+    ...(['owner', 'admin', 'billing'].includes(role) ? [{ to: '/billing', label: 'Billing', match: ['billing'] as Route['name'][], icon: '₹' }] : []),
     ...(['owner', 'admin'].includes(role) ? [{ to: '/integrations', label: 'Integrations', match: ['integrations', 'integration'] as Route['name'][], icon: '⇄' }] : []),
     { to: '/settings', label: 'Settings', match: ['settings'], icon: '⚙' },
   ];
@@ -269,7 +271,8 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const blocked = (r.name === 'clients' || r.name === 'client') && !isAgency
     || r.name === 'team' && !canManageTeam
     || r.name === 'work' && role === 'billing'
-    || (r.name === 'integrations' || r.name === 'integration') && !['owner', 'admin'].includes(role);
+    || (r.name === 'integrations' || r.name === 'integration') && !['owner', 'admin'].includes(role)
+    || r.name === 'billing' && !['owner', 'admin', 'billing'].includes(role);
 
   return (
     <Ctx.Provider value={ctx}>
@@ -302,6 +305,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'alerts' ? <Alerts onRead={loadUnread} />
             : r.name === 'diagnostic' ? <Diagnosis id={r.id} />
             : r.name === 'integrations' ? <Integrations />
+            : r.name === 'billing' ? <Billing />
             : r.name === 'integration' ? <Integration id={r.id} />
             : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /><RepairControls /></div> : null)
             : null}

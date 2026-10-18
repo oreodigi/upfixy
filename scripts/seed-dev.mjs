@@ -131,6 +131,12 @@ await asset('domain', 'orders.sunrise-bakery.in', 'orders.sunrise-bakery.in', 's
 await asset('account', 'oldclient', 'old-client.in', null, { suspended: true, suspend_reason: 'Unpaid invoice', plan: 'demores_basic' });
 await asset('domain', 'old-client.in', 'old-client.in', 'oldclient', { ssl: sslUntil(-3), ssl_known: true });
 
+// M6: an AMC coverage contract for Mitra Traders (₹0 provider-covered work). No merchant
+// profile is seeded: Razorpay test keys are entered by the owner under Billing.
+await db.query(`INSERT INTO coverage_contracts(workspace_id, client_id, reference, scope, valid_from, valid_until, created_by)
+  VALUES ($1, $2, 'AMC-2026-MITRA', 'Annual hosting maintenance: server-side faults on Mitra Traders sites are fixed at no charge.',
+          current_date - 90, current_date + 275, $3)`, [agency, mitra, owner]);
+
 // Tickets in several stages.
 const ticket = async (w, title, ...states) => {
   const id = (await one("INSERT INTO tickets(workspace_id, website_id, title) VALUES ($1, $2, $3) RETURNING id", [agency, w, title])).id;
