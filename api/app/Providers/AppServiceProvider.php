@@ -32,6 +32,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Monitoring\CycleRunner::class, fn ($app) => new \App\Monitoring\CycleRunner(
             $app->make(\App\Monitoring\DnsProbe::class), $app->make(\App\Monitoring\TlsProbe::class),
             $app->make(\App\Monitoring\HttpProbe::class), $app->make(\App\Monitoring\ProbeHealth::class), $m('retry_delays_ms')));
+        // M5 AI gateway: no client at all unless a key AND a model are configured.
+        $this->app->bind(\App\Diagnostics\Ai\AiClient::class, fn () => config('upfixy.ai.openai_key') && config('upfixy.ai.model')
+            ? new \App\Diagnostics\Ai\OpenAiResponsesClient(config('upfixy.ai.openai_key'), config('upfixy.ai.model'), config('upfixy.ai.base_url'),
+                config('upfixy.ai.timeout'), config('upfixy.ai.max_output_tokens'))
+            : null);
+        $this->app->bind(\App\Diagnostics\Ai\Gateway::class, fn ($app) => new \App\Diagnostics\Ai\Gateway($app->make(\App\Diagnostics\Ai\AiClient::class), config('upfixy.ai')));
         $this->app->bind(\App\Monitoring\Recorder::class, fn () => new \App\Monitoring\Recorder(
             gethostname() . ':' . getmypid(), $m('worker_version'), $m('region')));
     }

@@ -23,7 +23,8 @@ class CrossTenantSweepTest extends TestCase
     /** Tables whose contents must be byte-identical before and after the sweep. */
     private const WATCHED = ['workspaces', 'memberships', 'clients', 'client_assignments', 'websites', 'monitor_targets',
         'ownership_claims', 'delegations', 'observations', 'tickets', 'ticket_events', 'quotes', 'approvals', 'invitations', 'users',
-        'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs'];
+        'saved_views', 'check_runs', 'incidents', 'incident_events', 'notifications', 'notification_prefs',
+        'diagnostic_runs', 'findings', 'ai_analyses'];
 
     protected function setUp(): void
     {
@@ -60,6 +61,17 @@ class CrossTenantSweepTest extends TestCase
             [$v['ws'], $v['alice']->id, $v['incident']])->id;
         $this->owner()->insert('INSERT INTO notification_prefs(workspace_id, user_id, client_id, email, in_app) VALUES (?, ?, ?, false, true)',
             [$v['ws'], $v['alice']->id, $v['client']]);
+        // M5: a finished diagnosis with a finding and an AI analysis.
+        $this->observe($v['ws'], $v['target'], 'http', 'critical', 1, 7);
+        $v['run'] = $this->owner()->selectOne(
+            "INSERT INTO diagnostic_runs(workspace_id, website_id, requested_by, status, rule_version, snapshot, snapshot_hash, private_evidence, completed_at)
+             VALUES (?, ?, ?, 'completed', 'rules-test', '{\"items\":[],\"rules\":{}}', 'h', false, now()) RETURNING id",
+            [$v['ws'], $v['site'], $v['alice']->id])->id;
+        $obs = $this->owner()->table('observations')->where('monitor_target_id', $v['target'])->value('id');
+        $this->owner()->insert("INSERT INTO findings(workspace_id, run_id, source, finding_key, observed_fact, evidence_ids, confidence)
+                                VALUES (?, ?, 'rules', 'observed:x', 'Victim work observed', ARRAY[?]::uuid[], 'confirmed')", [$v['ws'], $v['run'], $obs]);
+        $this->owner()->insert("INSERT INTO ai_analyses(workspace_id, run_id, status, provider, prompt_version, schema_version)
+                                VALUES (?, ?, 'skipped', 'none', 'p', 's')", [$v['ws'], $v['run']]);
         $this->v = $v;
     }
 
@@ -86,6 +98,7 @@ class CrossTenantSweepTest extends TestCase
             'DELETE api/v1/clients/{client}/assignments/{user}' => [],
             'POST api/v1/websites/{website}/recheck', 'GET api/v1/incidents/{incident}', 'POST api/v1/incidents/{incident}/acknowledge',
             'POST api/v1/notifications/{notification}/read' => [],
+            'POST api/v1/websites/{website}/diagnose', 'GET api/v1/websites/{website}/diagnostics', 'GET api/v1/diagnostics/{run}' => [],
             default => $this->fail("Route {$method} {$uri} is not covered by the cross-tenant sweep. Add a body for it."),
         };
     }
@@ -103,6 +116,7 @@ class CrossTenantSweepTest extends TestCase
             'view' => $this->v['view'],
             'incident' => $this->v['incident'],
             'notification' => $this->v['notification'],
+            'run' => $this->v['run'],
             default => $this->fail("Unknown route parameter {{$name}}: map it to a victim id in the sweep."),
         };
     }

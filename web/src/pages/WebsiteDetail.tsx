@@ -129,6 +129,13 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
     return () => window.clearTimeout(t);
   }, [polls]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function analyze() {
+    try {
+      const r = await api<{ id: string }>('POST', `websites/${id}/diagnose`);
+      navigate({ name: 'diagnostic', id: r.id });
+    } catch (e) { setRecheck(e instanceof Error ? e.message : String(e)); }
+  }
+
   async function checkNow() {
     try {
       const r = await api<{ queued: number; message: string }>('POST', `websites/${id}/recheck`);
@@ -144,6 +151,9 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
   const kind = KIND_OF[tab];
   const checks = kind ? d.checks.filter((c) => c.kind === kind) : d.checks;
   const verified = d.verified_hosts.length > 0;
+  // §6 "Run Analyze": owner/admin, assigned technician, assigned client owner (the API re-checks).
+  const canAnalyze = ['owner', 'admin', 'technician', 'client_owner'].includes(role);
+  const hasFresh = d.checks.some((c) => c.freshness === 'fresh');
 
   return (
     <div className="page">
@@ -160,6 +170,9 @@ export default function WebsiteDetail({ id, tab: rawTab }: { id: string; tab?: s
         </div>
         <div className="actions">
           {role !== 'billing' && <button type="button" className="btn btn--quiet" onClick={() => void checkNow()}>Check now</button>}
+          {canAnalyze && (hasFresh
+            ? <button type="button" className="btn" onClick={() => void analyze()}>Analyze &amp; find solution</button>
+            : <span className="hint">Analyze needs fresh readings: use Check now first.</span>)}
           {canVerify && !verified && <button type="button" className="btn btn--quiet" onClick={() => openVerify({ id: d.id, name: d.display_name })}>Verify ownership</button>}
           {role !== 'billing' && <button type="button" className="btn" onClick={() => report(d.id, d.display_name)}>Report a problem</button>}
         </div>

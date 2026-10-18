@@ -11,6 +11,7 @@ import ClientDetail from './pages/ClientDetail';
 import WebsiteDetail from './pages/WebsiteDetail';
 import Work from './pages/Work';
 import Alerts, { AlertPrefs } from './pages/Alerts';
+import Diagnosis from './pages/Diagnosis';
 
 const PENDING_INVITE = 'upfixy.pendingInvite';
 const store = {
@@ -230,7 +231,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const primary: NavItem[] = [
     { to: '/', label: 'Overview', match: ['overview'], icon: '◎' },
     ...(isAgency ? [{ to: '/clients', label: 'Clients', match: ['clients', 'client'] as Route['name'][], icon: '▦' }] : []),
-    { to: '/websites', label: 'Websites', match: ['websites', 'website'], icon: '◱' },
+    { to: '/websites', label: 'Websites', match: ['websites', 'website', 'diagnostic'], icon: '◱' },
     ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work queue' : 'Issues', match: ['work'] as Route['name'][], icon: '☰' }] : []),
   ];
   const secondary: NavItem[] = [
@@ -295,6 +296,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'work' ? <Work />
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
             : r.name === 'alerts' ? <Alerts onRead={loadUnread} />
+            : r.name === 'diagnostic' ? <Diagnosis id={r.id} />
             : r.name === 'settings' ? (me ? <div className="page"><SecurityPanel me={me} onChange={() => void loadMe()} /><AlertPrefs /></div> : null)
             : null}
         </main>

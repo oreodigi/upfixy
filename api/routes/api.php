@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BoardController;
 use App\Http\Controllers\Api\ClaimController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\DiagnosticController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\NotificationController;
@@ -75,6 +76,9 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'tenant', 'full'])->group(funct
         Route::get('websites/{website}', [WebsiteController::class, 'show'])->whereUuid('website');
         Route::get('websites/{website}/history', [WebsiteController::class, 'history'])->whereUuid('website');
         Route::post('websites/{website}/recheck', [WebsiteController::class, 'recheck'])->whereUuid('website')->middleware('throttle:30,1');
+        Route::post('websites/{website}/diagnose', [DiagnosticController::class, 'start'])->whereUuid('website')->middleware('throttle:10,1');
+        Route::get('websites/{website}/diagnostics', [DiagnosticController::class, 'index'])->whereUuid('website');
+        Route::get('diagnostics/{run}', [DiagnosticController::class, 'show'])->whereUuid('run');
 
         Route::get('websites/{website}/claims', [ClaimController::class, 'index'])->whereUuid('website');
         Route::post('websites/{website}/claims', [ClaimController::class, 'store'])->whereUuid('website')->middleware('throttle:20,1');

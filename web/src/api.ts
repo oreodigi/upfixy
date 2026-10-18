@@ -170,3 +170,28 @@ export interface ApiPrefs {
   workspace: { email: boolean; in_app: boolean };
   clients: Array<{ client_id: string; email: boolean; in_app: boolean }>;
 }
+
+// ----------------------------------------------------------------- M5 types
+export type Confidence = 'confirmed' | 'likely' | 'possible' | 'unknown';
+export interface ApiFinding {
+  key: string; observed_fact: string; evidence_ids: string[]; hypothesis: string | null; supporting_evidence_ids: string[];
+  contradicting_evidence_ids: string[]; confidence: Confidence; responsibility: string;
+  recommended_actions: Array<{ kind: string; text: string }>; human_review_required: boolean;
+}
+export interface ApiAiFinding {
+  finding_id: string; evidence_ids: string[]; observed_fact: string;
+  hypotheses: Array<{ text: string; supporting_evidence_ids: string[]; contradicting_evidence_ids: string[]; confidence: Confidence }>;
+  recommended_actions: Array<{ text: string; kind: string; operation_id: string | null }>; unknowns: string[]; human_review_required: boolean;
+}
+export interface ApiDiagnosis {
+  id: string; website_id: string; website: string; status: string; created_at: string; completed_at: string | null;
+  observations: ApiFinding[]; hypotheses: ApiFinding[];
+  missing: Array<{ key: string; detail: string; next_step: string; host?: string }>;
+  skipped: Array<{ check: string; label: string; reason: string }>;
+  human_review_required: boolean;
+  evidence: Array<{ evidence_id: string; host: string; kind: string; result_code: string; severity: string; observed_at: string; freshness: string; source: string; facts?: Record<string, unknown> }>;
+  ai: { status: 'pending' | 'succeeded' | 'rejected' | 'unavailable' | 'skipped' | 'budget_exceeded'; message?: string; summary?: string;
+        findings?: ApiAiFinding[]; missing_information?: string[];
+        audit?: { model: string | null; prompt_version: string; schema_version: string; rejection_reasons: string[]; latency_ms: number | null } };
+  rule_version?: string;
+}

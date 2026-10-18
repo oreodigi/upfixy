@@ -34,4 +34,23 @@ return [
         'tls_timeout' => 8,
         'dns_timeout' => 2.0,
     ],
+
+    // M5 AI-assisted diagnosis (DX-005/006). OFF unless both key and model are set:
+    // model, region, retention terms and budgets are open founder decisions (FRD §25.8).
+    'ai' => [
+        'openai_key' => env('OPENAI_API_KEY'),
+        'model' => env('UPFIXY_AI_MODEL'),
+        'base_url' => env('UPFIXY_AI_BASE_URL', 'https://api.openai.com/v1'),
+        'timeout' => (int) env('UPFIXY_AI_TIMEOUT', 30),
+        'max_output_tokens' => (int) env('UPFIXY_AI_MAX_OUTPUT_TOKENS', 1500),
+        'daily_limit' => (int) env('UPFIXY_AI_DAILY_LIMIT', 20),                         // analyses per workspace per day
+        'monthly_cost_cap_micros' => (int) env('UPFIXY_AI_MONTHLY_CAP_MICROS', 5_000_000),  // US$5 per workspace per month
+        'price_in_per_mtok' => (float) env('UPFIXY_AI_PRICE_IN', 0),   // US$ per 1M tokens, which equals micro-dollars per token
+        'price_out_per_mtok' => (float) env('UPFIXY_AI_PRICE_OUT', 0),
+        'breaker_failures' => 3,
+        'breaker_seconds' => 300,
+    ],
+    'diagnostics' => [
+        'reuse_minutes' => 60,   // same evidence within this window returns the existing report (AC-DX-006.2)
+    ],
 ];

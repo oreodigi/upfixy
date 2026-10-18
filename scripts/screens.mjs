@@ -42,6 +42,8 @@ const SCREENS = [
   ['agency-website-ssl', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'SSL' }]],
   ['agency-website-activity', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /mitratraders/, nth: 0 }, { tab: 'Activity' }, { click: 'Check now' }]],
   ['agency-alerts', 'owner', 'Demo Agency', [{ goto: '/alerts' }]],
+  ['agency-diagnosis', 'owner', 'Demo Agency', [{ goto: '/websites' }, { link: /kalaghar-jewels\.com/, nth: 0 }, { click: 'Analyze & find solution' }]],
+  ['client-owner-diagnosis', 'client', 'Demo Agency', [{ goto: '/websites' }, { link: /shop\.mitratraders/, nth: 0 }, { click: 'Analyze & find solution' }]],
   ['agency-work', 'owner', 'Demo Agency', [{ goto: '/work' }]],
   ['agency-ticket', 'owner', 'Demo Agency', [{ goto: '/work' }, { text: 'Renew SSL certificate', nth: 0 }]],
   ['agency-team', 'owner', 'Demo Agency', [{ goto: '/team' }]],
