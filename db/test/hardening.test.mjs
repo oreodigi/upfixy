@@ -566,3 +566,52 @@ describe('email verification', () => {
     await expect(app.query('SELECT * FROM email_verification_tokens')).rejects.toThrow(/permission denied/);
   });
 });
+
+// Security audit, 18 Oct 2026 (docs/SECURITY.md S-01 to S-05).
+describe('M1 audit fixes', () => {
+  it('S-01: admins can rename a workspace but never change id, kind or provider flag', async () => {
+    await as(id.adam, id.wsA, (c) => c.query("UPDATE workspaces SET name = 'A renamed' WHERE id = $1", [id.wsA]));
+    expect((await one(owner, 'SELECT name FROM workspaces WHERE id = $1', [id.wsA])).name).toBe('A renamed');
+    for (const sql of ['UPDATE workspaces SET provider_flag = true WHERE id = $1',
+      "UPDATE workspaces SET kind = 'solo' WHERE id = $1",
+      'UPDATE workspaces SET id = gen_random_uuid() WHERE id = $1']) {
+      await expect(as(id.adam, id.wsA, (c) => c.query(sql, [id.wsA]))).rejects.toThrow(/permission denied/);
+    }
+    // A technician cannot rename (policy: owner/admin only).
+    const r = await as(id.tina, id.wsA, (c) => c.query("UPDATE workspaces SET name = 'hijack' WHERE id = $1", [id.wsA]));
+    expect(r.rowCount).toBe(0);
+    expect((await one(owner, 'SELECT provider_flag FROM workspaces WHERE id = $1', [id.wsA])).provider_flag).toBe(false);
+  });
+
+  it('S-02: client assignments cannot be edited in place', async () => {
+    await expect(as(id.olive, id.wsA, (c) => c.query('UPDATE client_assignments SET user_id = $1 WHERE user_id = $2', [id.adam, id.tina])))
+      .rejects.toThrow(/permission denied/);
+  });
+
+  it('S-03: observations are append-only for the worker, the app and even via SECURITY DEFINER paths', async () => {
+    await as(null, id.wsA, (c) => c.query(
+      "INSERT INTO observations(workspace_id, monitor_target_id, check_kind, severity, result_code, observed_at, cycle_no) VALUES ($1,$2,'http','critical','HTTP_503',now(),1)",
+      [id.wsA, id.apex]), worker);
+    await expect(as(null, id.wsA, (c) => c.query("UPDATE observations SET severity = 'ok'"), worker)).rejects.toThrow(/permission denied/);
+    await expect(as(null, id.wsA, (c) => c.query('DELETE FROM observations'), worker)).rejects.toThrow(/permission denied/);
+    await expect(as(id.olive, id.wsA, (c) => c.query("UPDATE observations SET severity = 'ok'"))).rejects.toThrow(/permission denied/);
+    // Even a role with table rights (here the owner, standing in for any future definer function) cannot UPDATE.
+    await expect(owner.query("UPDATE observations SET severity = 'ok'")).rejects.toThrow(/append-only/);
+    // The worker cannot insert into another workspace.
+    await expect(as(null, id.wsA, (c) => c.query(
+      "INSERT INTO observations(workspace_id, monitor_target_id, check_kind, severity, result_code, observed_at, cycle_no) VALUES ($1,$2,'http','ok','HTTP_200',now(),2)",
+      [id.wsB, id.apex]), worker)).rejects.toThrow();
+  });
+
+  it('S-05: site_private_access only answers for the caller\'s own workspace', async () => {
+    await verifyHost('x.example');
+    expect((await as(id.olive, id.wsA, (c) => one(c, "SELECT site_private_access($1, $2, 'read') AS ok", [id.wsA, id.apex]))).ok).toBe(true);
+    // Bob (workspace B) asks about A's target: always false, so existence of proof never leaks.
+    expect((await as(id.bob, id.wsB, (c) => one(c, "SELECT site_private_access($1, $2, 'read') AS ok", [id.wsA, id.apex]))).ok).toBe(false);
+    expect((await as(id.bob, null, (c) => one(c, "SELECT site_private_access($1, $2, 'read') AS ok", [id.wsA, id.apex]))).ok).toBe(false);
+  });
+
+  it('tickets cannot be deleted by the app', async () => {
+    await expect(as(id.olive, id.wsA, (c) => c.query('DELETE FROM tickets'))).rejects.toThrow(/permission denied/);
+  });
+});
