@@ -65,7 +65,6 @@ final class RuleEngine
         $ev = [$i['evidence_id']];
         $recent = $i['recent'];
         $repeat = $recent['failed'] >= 2;
-        $when = substr($i['observed_at'], 0, 16) . 'Z';
         $observed = $this->observedFact($i);
         $actions = $this->actions($issue);
 
@@ -150,13 +149,20 @@ final class RuleEngine
     {
         $f = $i['facts'];
         $title = IssueLibrary::title($i['result_code']);
-        $times = $i['recent']['cycles'] > 0 ? " ({$i['recent']['failed']} of the last {$i['recent']['cycles']} checks failed)" : '';
+        $r = $i['recent'];
+        $times = match (true) {
+            $r['cycles'] <= 1 => '',
+            $r['failed'] === $r['cycles'] => " (all of the last {$r['cycles']} checks failed)",
+            default => " ({$r['failed']} of the last {$r['cycles']} checks failed)",
+        };
+        // NFR-08: shown in the user's zone; Asia/Kolkata until per-user zones exist.
+        $at = (new \DateTimeImmutable($i['observed_at']))->setTimezone(new \DateTimeZone('Asia/Kolkata'))->format('j M Y, H:i');
         $extra = match (true) {
             isset($f['status']) && $i['kind'] === 'http' => " — HTTP {$f['status']}",
             isset($f['days_left']) && $i['kind'] === 'tls' => isset($f['not_after']) ? ' — valid until ' . substr($f['not_after'], 0, 10) : '',
             default => '',
         };
-        return "{$title} on {$i['host']}{$extra}, observed " . substr($i['observed_at'], 0, 16) . " UTC{$times}.";
+        return "{$title} on {$i['host']}{$extra}, observed {$at} IST{$times}.";
     }
 
     private function actions(?array $issue): array

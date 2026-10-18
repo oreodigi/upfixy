@@ -24,7 +24,7 @@ CREATE TABLE diagnostic_runs (
   PRIMARY KEY (id),
   UNIQUE (workspace_id, id),
   FOREIGN KEY (workspace_id, website_id) REFERENCES websites(workspace_id, id) ON DELETE CASCADE,
-  FOREIGN KEY (workspace_id, requested_by) REFERENCES memberships(workspace_id, user_id)
+  FOREIGN KEY (workspace_id, requested_by) REFERENCES memberships(workspace_id, user_id) DEFERRABLE INITIALLY DEFERRED
 );
 CREATE INDEX diagnostic_runs_site_idx ON diagnostic_runs(website_id, created_at DESC);
 

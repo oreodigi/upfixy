@@ -65,6 +65,14 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   ok(`${tag}: Enter opens evidence details`, await p.locator('details.evidence[open] .facts').first().isVisible());
   await p.getByRole('button',{name:'Check now'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(500);
   ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.headline [role=status]').innerText()));
+  // 9b. M5: Analyze from the keyboard opens the report, which has no "Fix now".
+  await p.goto(B+'/websites',{waitUntil:'networkidle'});
+  await p.getByRole('link',{name:/kalaghar-jewels\.com/}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
+  await p.getByRole('button',{name:'Analyze & find solution'}).focus(); await p.keyboard.press('Enter');
+  await p.waitForURL(/\/diagnostics\//, {timeout: 10000}).catch(() => undefined);
+  await p.waitForSelector('#obs-h', {timeout: 10000}).catch(() => undefined);
+  ok(`${tag}: Analyze opens the diagnostic report`, /\/diagnostics\//.test(p.url()) && await p.locator('#obs-h').isVisible());
+  ok(`${tag}: report offers no "Fix now"`, (await p.getByRole('button',{name:/fix now/i}).count()) === 0);
   await c.close();
 }
 // 10. Acknowledge an incident with the keyboard (once; it changes data).

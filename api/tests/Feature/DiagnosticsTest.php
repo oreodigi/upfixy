@@ -76,7 +76,8 @@ class DiagnosticsTest extends TestCase
         $r = $this->report($id);
         $obs = collect($r->json('observations'))->firstWhere('confidence', 'confirmed');
         $this->assertStringContainsString('HTTP 503', $obs['observed_fact']);
-        $this->assertStringContainsString('3 of the last 3 checks failed', $obs['observed_fact']);
+        $this->assertStringContainsString('all of the last 3 checks failed', $obs['observed_fact']);
+        $this->assertStringContainsString('IST', $obs['observed_fact']);
         $server = collect($r->json('hypotheses'))->first(fn ($h) => str_starts_with($h['key'], 'cause:server_side'));
         $this->assertSame('unknown', $server['confidence'], 'no hosting telemetry: a server-side cause is never more than unknown');
         $this->assertSame('undetermined', $server['responsibility'], 'DX-004: nothing is called provider-covered without a contract');
@@ -313,5 +314,14 @@ class DiagnosticsTest extends TestCase
             }
         }
         $this->assertSame('completed', $this->owner()->table('diagnostic_runs')->where('id', $id)->value('status'));
+    }
+
+    public function test_a_workspace_with_diagnoses_can_be_removed(): void // NFR-14
+    {
+        $this->site503();
+        $this->diagnose()->assertCreated();
+        $this->owner()->delete('DELETE FROM workspaces WHERE id = ?', [$this->f['ws']]);
+        $this->assertSame(0, $this->owner()->table('diagnostic_runs')->count());
+        $this->assertSame(0, $this->owner()->table('ai_analyses')->count());
     }
 }
