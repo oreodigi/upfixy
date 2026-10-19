@@ -5,7 +5,7 @@ import type { ApiCheck, ApiClient, ApiSite } from './api';
 import type { Client, Component, Issue, Site } from './demo-data';
 import { HELP } from './help';
 
-const OK_LABEL: Record<ApiCheck['kind'], string> = { dns: 'Resolving', tls: 'Valid', http: 'None' };
+const OK_LABEL: Record<ApiCheck['kind'], string> = { dns: 'Resolves', tls: 'Valid', http: 'None' };
 
 export function checkComponent(c: ApiCheck | undefined): Component {
   if (!c) return { state: 'unknown', label: 'Not checked yet' };

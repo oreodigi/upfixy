@@ -7,6 +7,7 @@ import type { HealthLane } from '@upfixy/core';
 import {
   Activity, Bell, Building2, CircleAlert, CircleCheck, CircleHelp, Globe, LayoutGrid, LifeBuoy, List, Lock, Microscope,
   Network, Plug, Plus, ShieldCheck, Stethoscope, TriangleAlert, UserRound, Wallet, HardDrive, Users, ArrowRight,
+  ChevronDown, ExternalLink, FileSearch, BadgeCheck, MessageSquareWarning, Lightbulb,
 } from 'lucide-react';
 import { api, ApiError, rupees, type ApiIncident, type ApiNotification, type ApiOverview, type ApiSavedView, type ApiSiteMetrics, type PaymentStatus } from '../api';
 import { useWs } from '../app-context';
@@ -16,7 +17,7 @@ import { filterClients, filterSites, isFiltered, laneCounts, type Filters } from
 import { toClient, toSite } from '../live-mapping';
 import { href, navigate, onLinkClick } from '../router';
 import {
-  Accordion, EmptyState, MetricCard, Monogram, Panel, Sparkline, StatusBadge, TimeSeriesChart, fmtMs, fmtPct, useMetrics, type UiStatus,
+  Accordion, EmptyState, KebabMenu, MetricCard, Monogram, Panel, STATUS_ICON, Sparkline, StatusBadge, TimeSeriesChart, fmtMs, fmtPct, useMetrics, type UiStatus,
 } from '../ui/kit';
 import { ActivityTimeline, AttentionQueue, LANE_STATUS } from '../ui/blocks';
 import { CertList } from './Overview';
@@ -125,6 +126,7 @@ function LaneFilter({ counts, selected, onChange }: { counts: Record<HealthLane,
   );
 }
 
+const LANE_SPARK: Record<HealthLane, string> = { healthy: '#16a34a', warning: '#d97706', critical: '#dc2626', unknown: '#64748b', needs_setup: '#94a3b8' };
 const BOARD_ORDER: HealthLane[] = ['healthy', 'warning', 'critical', 'unknown', 'needs_setup'];
 const URGENCY: HealthLane[] = ['critical', 'warning', 'unknown', 'needs_setup', 'healthy'];
 const LANE_ICON: Record<HealthLane, typeof CircleCheck> = { healthy: CircleCheck, warning: TriangleAlert, critical: CircleAlert, unknown: CircleHelp, needs_setup: Plus };
@@ -134,7 +136,7 @@ const COLUMNS: Array<{ key: string; lanes: HealthLane[]; title: string; hint: st
   { key: 'healthy', lanes: ['healthy'], title: 'Healthy', hint: 'All fresh checks passing', tone: 'healthy' },
   { key: 'warning', lanes: ['warning'], title: 'Warning', hint: 'Needs a look soon', tone: 'warning' },
   { key: 'critical', lanes: ['critical'], title: 'Critical', hint: 'Failing now', tone: 'critical' },
-  { key: 'unknown', lanes: ['unknown', 'needs_setup'], title: 'No fresh readings', hint: 'Unknown or not set up yet', tone: 'unknown' },
+  { key: 'unknown', lanes: ['unknown', 'needs_setup'], title: 'Unknown', hint: 'No fresh readings yet', tone: 'unknown' },
 ];
 
 /** Cards rendered per column before "Show all": keeps a 200-card board fast on phones (NFR-02). */
@@ -298,13 +300,25 @@ function BoardBar({ board, filters, setFilters, counts, shown, total, extra, pla
   );
 }
 
-function CompChip({ label, icon: Icon, c }: { label: string; icon: typeof Globe; c: Component }) {
+/** Area chip: the status shape (✓ ! ? ○) plus the area name, so colour is never the only signal. */
+function CompChip({ label, c }: { label: string; icon?: typeof Globe; c: Component }) {
   const st = COMP_STATUS[c.state];
+  const Icon = STATUS_ICON[st];
   return (
     <span className={`ux-chip ${st === 'not_connected' ? 'ux-status--not_connected' : `ux-tint--${st}`}`} title={`${label}: ${c.label}`}>
       <Icon aria-hidden="true" />{label}<span className="sr-only">: {c.label}</span>
     </span>
   );
+}
+
+/** Hourly average of several sites' response series (real readings only; an hour with none stays a gap). */
+function averageSeries(list: Array<Array<number | null> | undefined>): Array<number | null> {
+  const rows = list.filter(Boolean) as Array<Array<number | null>>;
+  if (!rows.length) return [];
+  return rows[0].map((_, i) => {
+    const v = rows.map((r) => r[i]).filter((x): x is number => x !== null && x !== undefined);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  });
 }
 
 function IssueLinks({ issues, host, max = 2 }: { issues: Array<Issue & { host?: string }>; host: string; max?: number }) {
@@ -387,7 +401,7 @@ function useOpenIncidents(wsId: string | undefined) {
 
 // ================================================================== UX-03 website board
 function WebsiteCard({ site, m, client }: { site: Site; m: ApiSiteMetrics | undefined; client?: string }) {
-  const { role, canVerify, openVerify, report, setError } = useWs();
+  const { role, canVerify, openVerify, openHelp, report, setError } = useWs();
   const [busy, setBusy] = useState(false);
   const canAnalyze = ['owner', 'admin', 'technician', 'client_owner'].includes(role) && !!site.lastVerifiedAt && site.issues.length > 0;
   async function analyze() {
@@ -398,45 +412,64 @@ function WebsiteCard({ site, m, client }: { site: Site; m: ApiSiteMetrics | unde
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false); }
   }
   const stale = !site.lastVerifiedAt;
+  const top = site.issues[0];
+  const sslDays = m?.tls_days_left !== null && m?.tls_days_left !== undefined && site.components.ssl.state !== 'unknown' ? m.tls_days_left : null;
+  const sslText = sslDays === null ? site.components.ssl.label : sslDays < 0 ? 'Expired' : `${sslDays} days`;
+  const rows = (
+    <ul className="ux-card__rows">
+      <li><Activity aria-hidden="true" /><span className="k">Uptime 24 h</span><span className="v">{fmtPct(m?.availability_pct, 1)}</span></li>
+      <li><Lock aria-hidden="true" /><span className="k">SSL</span><span className={`ux-v ux-tint--${COMP_STATUS[site.components.ssl.state]}`}>{sslText}</span></li>
+      <li><Network aria-hidden="true" /><span className="k">DNS</span><span className={`ux-v ux-tint--${COMP_STATUS[site.components.domain.state]}`}>{site.components.domain.label}</span></li>
+      <li><Globe aria-hidden="true" /><span className="k">Response</span><span className="v">{fmtMs(m?.last_ms)}</span></li>
+      <li><HardDrive aria-hidden="true" /><span className="k">Backup</span><span className="ux-v ux-status--not_connected">Not connected</span></li>
+    </ul>
+  );
   return (
     <article className={`ux-card ux-card--${site.lane}`} aria-label={`${site.host}, ${LANE_LABEL[site.lane]}`}>
       <div className="ux-card__head">
         <Monogram name={site.host} />
         <div className="ux-card__title">
-          <a href={site.href} onClick={onLinkClick}>{site.host}</a>
+          <a href={site.href} onClick={onLinkClick} title={site.host}>{site.host}</a>
           <span>{client ?? (site.hosts && site.hosts.length > 1 ? `${site.hosts.length} addresses` : 'Website')}</span>
         </div>
+        <KebabMenu label={`More actions for ${site.host}`} items={[
+          { label: 'Open details', icon: FileSearch, onSelect: () => navigate({ name: 'website', id: site.id }) },
+          { label: 'Open the website (new tab)', icon: ExternalLink, onSelect: () => window.open(`https://${site.host}/`, '_blank', 'noopener,noreferrer') },
+          canVerify && !site.verifiedHosts?.length && { label: 'Verify ownership', icon: BadgeCheck, onSelect: () => openVerify({ id: site.id, name: site.host }) },
+          role !== 'billing' && { label: 'Report a problem', icon: MessageSquareWarning, onSelect: () => report(site.id, site.host) },
+        ]} />
       </div>
-      <div style={{ marginTop: 10 }}><StatusBadge status={LANE_STATUS[site.lane]} /></div>
-      <ul className="ux-card__rows">
-        <li><Activity aria-hidden="true" /><span className="k">Availability 24 h</span>
-          <span className="v">{fmtPct(m?.availability_pct, 1)}</span></li>
-        <li><Lock aria-hidden="true" /><span className="k">SSL</span>
-          <span className={`ux-v ux-tint--${COMP_STATUS[site.components.ssl.state]}`}>{m?.tls_days_left !== null && m?.tls_days_left !== undefined && site.components.ssl.state !== 'unknown'
-            ? (m.tls_days_left < 0 ? 'Expired' : `${m.tls_days_left} days`) : site.components.ssl.label}</span></li>
-        <li><Network aria-hidden="true" /><span className="k">DNS</span>
-          <span className={`ux-v ux-tint--${COMP_STATUS[site.components.domain.state]}`}>{site.components.domain.label}</span></li>
-        <li><Globe aria-hidden="true" /><span className="k">Response</span>
-          <span className="v">{fmtMs(m?.last_ms)}</span></li>
-        <li><HardDrive aria-hidden="true" /><span className="k">Backups</span>
-          <span className="ux-v ux-status--not_connected">Not connected</span></li>
-      </ul>
-      {m && m.ms_series.some((v) => v !== null) && (
-        <div className="ux-card__spark" aria-hidden="true"><Sparkline values={m.ms_series} color="#7c3aed" /><span>response, 24 h</span></div>
+      <div className="ux-card__status">
+        <StatusBadge status={LANE_STATUS[site.lane]} />
+        <RequestBadge n={site.openRequests ?? 0} />
+      </div>
+      <div className="ux-card__stats" aria-hidden="true">
+        <div><span>Uptime</span><b>{fmtPct(m?.availability_pct, 1)}</b></div>
+        <div><span>SSL</span><b>{sslText}</b></div>
+        <div><span>Response</span><b>{fmtMs(m?.last_ms)}</b></div>
+      </div>
+      <div className="ux-desktop-only">
+        {rows}
+        {m && m.ms_series.some((v) => v !== null) && (
+          <div className="ux-card__spark" aria-hidden="true"><Sparkline values={m.ms_series} color="#7c3aed" area /><span>response, 24 h</span></div>
+        )}
+      </div>
+      <details className="ux-card__tech ux-mobile-only">
+        <summary>Technical details<ChevronDown aria-hidden="true" /></summary>
+        {rows}
+      </details>
+      {top && (
+        <ul className="ux-issues">
+          <li><span>{top.title}</span></li>
+          {site.issues.length > 1 && <li className="ux-issues__more">+{site.issues.length - 1} more on the details page</li>}
+        </ul>
       )}
-      <IssueLinks issues={site.issues} host={site.host} />
-      <div className="ux-chips" style={{ marginTop: site.openRequests ? 10 : 0 }}><RequestBadge n={site.openRequests ?? 0} /></div>
-      {(canAnalyze || (canVerify && !site.verifiedHosts?.length) || role !== 'billing') && (
-        <div className="ux-card__actions">
-          {canAnalyze && (
-            <button type="button" className="ux-btn ux-btn--primary ux-btn--sm" disabled={busy} onClick={() => void analyze()}>
-              <Stethoscope aria-hidden="true" />Analyze<span className="sr-only"> {site.host}</span>
-            </button>
-          )}
-          {canVerify && !site.verifiedHosts?.length && <button type="button" className="ux-link" onClick={() => openVerify({ id: site.id, name: site.host })}>Verify ownership</button>}
-          {role !== 'billing' && <button type="button" className="ux-link" onClick={() => report(site.id, site.host)}>Report a problem</button>}
-        </div>
-      )}
+      <div className="ux-card__btns">
+        {top && <button type="button" className="ux-btn ux-btn--soft" onClick={() => openHelp(top, site.host)}><Lightbulb aria-hidden="true" />Help me understand</button>}
+        {canAnalyze
+          ? <button type="button" className="ux-btn ux-btn--primary" disabled={busy} onClick={() => void analyze()}><Stethoscope aria-hidden="true" />Analyze &amp; find solution<span className="sr-only"> for {site.host}</span></button>
+          : !top && <a className="ux-btn ux-btn--ghost" href={site.href} onClick={onLinkClick}>View details<span className="sr-only"> of {site.host}</span></a>}
+      </div>
       <div className="ux-card__foot">
         <span className={stale ? 'ux-stale' : undefined}>{ago(site.lastVerifiedAt, site.lastObservedAt)}</span>
       </div>
@@ -485,6 +518,7 @@ function WebsiteKpis({ counts, total, avail }: { counts: Record<HealthLane, numb
       <MetricCard tone="violet" icon={CircleHelp} label="No fresh readings" value={counts.unknown + counts.needs_setup}
         sub={counts.needs_setup ? `${counts.needs_setup} waiting for first checks` : 'Shown as Unknown, never Healthy'} />
       <MetricCard tone="aqua" icon={Activity} label="Availability 24 h" value={fmtPct(avail.pct, 2)} spark={avail.spark}
+        sparkDomain={[Math.max(0, Math.floor((Math.min(100, ...avail.spark.map((v) => v ?? 100)) - 1) / 5) * 5), 100]} trendLabel="Trend: availability per hour, last 24 hours"
         sub={avail.pct === null ? 'No readings yet' : 'Successful HTTP checks'} />
     </div>
   );
@@ -521,7 +555,7 @@ export function WebsitesBoard() {
       <Accordion title="Certificate renewals">
         <CertList items={tls} />
       </Accordion>
-      <Accordion title="Recent activity" defaultOpenDesktop={false}>
+      <Accordion title="Recent activity">
         <ActivityTimeline items={metrics?.activity} limit={6} />
       </Accordion>
     </aside>
@@ -550,7 +584,7 @@ export function WebsitesBoard() {
           <MetricCard tone="orange" icon={Lock} label="SSL certificate" value={days === null ? '—' : days < 0 ? 'Expired' : `${days} days`} sub={days === null ? s.components.ssl.label : 'Until it expires'} />
           <MetricCard tone="blue" icon={LifeBuoy} label="Open requests" value={s.openRequests ?? 0} href={role !== 'billing' ? '/work' : undefined} sub={s.issues.length ? `${plural(s.issues.length, 'current problem')}` : 'No current problems'} />
         </div>
-        <div className="ux-grid ux-grid--rail">
+        <div className="ux-grid ux-grid--rail ux-grid--rail-wide">
           <div className="ux-spotlight" aria-label={`${s.host} overview`} style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
             <WebsiteCard site={s} m={m} />
             {metrics && m && (
@@ -578,7 +612,7 @@ export function WebsitesBoard() {
       ) : (
         <>
           <WebsiteKpis counts={allCounts} total={models.length} avail={avail} />
-          <div className="ux-grid ux-grid--rail">
+          <div className="ux-grid ux-grid--rail ux-grid--rail-wide">
             <div style={{ minWidth: 0 }}>
               <BoardBar board="websites" filters={filters} setFilters={setFilters} counts={counts} shown={shown.length} total={models.length}
                 placeholder={isAgency ? 'Search websites or clients' : 'Search websites'}
@@ -604,7 +638,7 @@ export function WebsitesBoard() {
 }
 
 // ================================================================== UX-02 client board
-function ClientCard({ client }: { client: Client }) {
+function ClientCard({ client, spark }: { client: Client; spark?: Array<number | null> }) {
   const issues = client.sites.flatMap((s) => s.issues.map((i) => ({ ...i, host: i.host ?? s.host })));
   const impacted = client.sites.filter((s) => s.lane !== 'healthy').length;
   const times = (xs: Array<Date | null>) => xs.filter(Boolean).map((d) => d!.getTime());
@@ -625,7 +659,13 @@ function ClientCard({ client }: { client: Client }) {
           <span>{plural(client.sites.length, 'website')}{impacted > 0 && ` · ${impacted} need attention`}</span>
         </div>
       </div>
-      <div style={{ marginTop: 10 }}><StatusBadge status={LANE_STATUS[client.lane]} /></div>
+      <div className="ux-card__status">
+        <StatusBadge status={LANE_STATUS[client.lane]} />
+        {spark && spark.filter((v) => v !== null).length > 1 && (
+          <span className="ux-card__spark--head" title="Average response time of this client's websites, last 24 hours"><Sparkline values={spark} color={LANE_SPARK[client.lane]} /></span>
+        )}
+      </div>
+      {client.openTickets > 0 && <div className="ux-card__status"><RequestBadge n={client.openTickets} /></div>}
       {w && (
         <div className="ux-chips" aria-label="Worst status by area">
           <CompChip label="Web" icon={Globe} c={w.errors} />
@@ -634,8 +674,7 @@ function ClientCard({ client }: { client: Client }) {
           <CompChip label="Backup" icon={HardDrive} c={w.backup} />
         </div>
       )}
-      <IssueLinks issues={issues} host="" />
-      {client.openTickets > 0 && <div className="ux-chips"><RequestBadge n={client.openTickets} /></div>}
+      <IssueLinks issues={issues} host="" max={1} />
       <div className="ux-card__foot">
         <span className="ux-mini">
           {staff.length
@@ -700,7 +739,9 @@ export function ClientsBoard() {
   const { clients, sites, tickets, isStaff, role, loaded, workspace } = useWs();
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [incidents, reloadIncidents] = useOpenIncidents(workspace?.id);
+  const metrics = useMetrics(workspace?.id);
   const models = useMemo(() => clients.map(toClient), [clients]);
+  const sparkOf = (c: Client) => averageSeries(c.sites.map((s) => metrics?.websites[s.id]?.ms_series));
   const shown = filterClients(models, filters);
   const counts = laneCounts(filterClients(models, { ...filters, lanes: [] }));
   const all = laneCounts(models);
@@ -750,8 +791,8 @@ export function ClientsBoard() {
               <BoardBar board="clients" filters={filters} setFilters={setFilters} counts={counts} shown={shown.length} total={models.length}
                 placeholder="Search clients or websites" />
               {filters.layout === 'list'
-                ? <WebsiteTable sites={shown.flatMap((c) => c.sites)} metrics={undefined} clientName={(id) => models.find((c) => c.id === id)?.name} />
-                : <HealthColumns items={shown} noun="Clients" lanes={filters.lanes} counts={counts} render={(c) => <ClientCard client={c} />} />}
+                ? <WebsiteTable sites={shown.flatMap((c) => c.sites)} metrics={metrics?.websites} clientName={(id) => models.find((c) => c.id === id)?.name} />
+                : <HealthColumns items={shown} noun="Clients" lanes={filters.lanes} counts={counts} render={(c) => <ClientCard client={c} spark={sparkOf(c)} />} />}
             </div>
             <aside className="ux-rail" aria-label="Urgent issues and workload">
               <Accordion title="Urgent issues" count={incidents.length + issuesFromSites(sites).filter((i) => i.severity === 'critical').length}>

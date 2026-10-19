@@ -13,7 +13,7 @@ it('renders the client board with computed lanes and honest labels', () => {
   expect(html).not.toContain('Backup: ');                     // no doubled labels
   // A healthy client must not show every component as "Not connected".
   const anand = html.slice(html.indexOf('aria-label="Anand Chemicals'));
-  expect(anand.slice(0, anand.indexOf('</article>'))).toContain('Resolving');
+  expect(anand.slice(0, anand.indexOf('</article>'))).toContain('Resolves');
   expect(html).toContain('Help me understand');
 
   const lanes = Object.fromEntries(

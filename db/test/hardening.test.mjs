@@ -668,3 +668,10 @@ describe('M4 connectors and M6 payments: grants', () => {
     await owner.query("INSERT INTO payment_controls(live_allowed, reason) VALUES (false, 'restored by test')");
   });
 });
+
+describe('AC-UI-12 demo flag', () => {
+  it('the app can read but never set the demo flag', async () => {
+    await as(id.olive, id.wsA, (c) => c.query('SELECT is_demo FROM workspaces'));
+    await expect(as(id.olive, id.wsA, (c) => c.query('UPDATE workspaces SET is_demo = true'))).rejects.toThrow(/permission denied/);
+  });
+});

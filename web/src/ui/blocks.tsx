@@ -44,7 +44,7 @@ export function AttentionQueue({ incidents, issues, onChanged, limit = 6 }: {
     ...rest.map((i) => ({ key: `c${i.target_id}${i.kind}`, inc: null, iss: i })),
   ];
   return (
-    <ul className="ux-list">
+    <ul className="ux-list ux-list--compact">
       {rows.slice(0, limit).map(({ key, inc, iss }) => {
         const sev = inc ? 'critical' : iss!.severity === 'critical' ? 'critical' : 'warning';
         const kind = inc ? inc.root_kind : iss!.kind;
@@ -54,18 +54,18 @@ export function AttentionQueue({ incidents, issues, onChanged, limit = 6 }: {
         const title = inc ? inc.title : issueTitle(code, iss!.kind, iss!.severity);
         const at = inc ? inc.last_failure_at : iss!.observed_at;
         return (
-          <li key={key}>
+          <li key={key} style={{ alignItems: 'flex-start' }}>
             <span className={`ux-list__icon ux-tint--${sev}`} aria-hidden="true"><Icon /></span>
             <div className="ux-list__main">
-              <a className="ux-list__title" href={href({ name: 'website', id: inc ? inc.website_id : iss!.website_id })} onClick={onLinkClick}>{host}</a>
-              <span className="ux-list__meta">{title}</span>
+              <span className="ux-list__title" style={{ fontWeight: 650 }}>{title}</span>
+              <a className="ux-list__meta" href={href({ name: 'website', id: inc ? inc.website_id : iss!.website_id })} onClick={onLinkClick} style={{ color: 'var(--ink-2)', textDecoration: 'none' }}>{host}</a>
               <span className="ux-list__meta">
                 {inc ? <>Incident · failing since {since(new Date(inc.first_failure_at))}{inc.acknowledged_at ? ' · acknowledged' : ''}</> : <>Reading {since(new Date(at))}</>}
               </span>
-              <span style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+              <span className="ux-list__actions">
                 <button type="button" className="ux-link" onClick={() => openHelp({ code, title, observedAt: new Date(at), host }, host)}>Help me understand</button>
                 {inc && inc.status === 'open' && !inc.acknowledged_at && canAck && (
-                  <button type="button" className="ux-btn ux-btn--ghost ux-btn--sm" disabled={busy === inc.id} onClick={() => void ack(inc.id)}>Acknowledge</button>
+                  <button type="button" className="ux-link" style={{ color: 'var(--ink-2)' }} disabled={busy === inc.id} onClick={() => void ack(inc.id)}>Acknowledge<span className="sr-only"> incident on {host}</span></button>
                 )}
               </span>
             </div>
@@ -87,7 +87,7 @@ export function ActivityTimeline({ items, limit = 8 }: { items: ApiActivity[] | 
   if (!items) return <div className="ux-skel" style={{ height: 180 }} aria-hidden="true" />;
   if (!items.length) return <EmptyState icon={Inbox} title="No activity yet">Incidents and request updates appear here.</EmptyState>;
   return (
-    <ul className="ux-list">
+    <ul className="ux-list ux-list--compact">
       {items.slice(0, limit).map((a, i) => {
         const def = ACT[a.kind];
         const state = a.kind.startsWith('ticket_') ? (a.kind.slice(7) as TicketState) : null;

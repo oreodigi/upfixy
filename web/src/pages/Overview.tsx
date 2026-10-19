@@ -13,6 +13,7 @@ import { href, navigate, onLinkClick } from '../router';
 import { Donut, MetricCard, Panel, ResponsiveTabs, StatusBadge, TimeSeriesChart, fmtMs, fmtPct, useMetrics, Monogram } from '../ui/kit';
 import { ActivityTimeline, AttentionQueue, LANE_COLOR, LANE_STATUS } from '../ui/blocks';
 import { AddButton } from './Boards';
+import { cap } from '../ui/Shell';
 
 type MTab = 'trends' | 'websites' | 'activity' | 'requests';
 
@@ -46,6 +47,10 @@ export default function Overview() {
     .map(([id, m]) => ({ id, days: m.tls_days_left!, host: sites.find((s) => s.id === id)?.display_name ?? '' }))
     .sort((a, b) => a.days - b.days), [metrics, sites]);
 
+  const availSpark = series.map((p) => p.availability_pct);
+  const minAvail = Math.min(100, ...series.map((p) => p.availability_pct ?? 100));
+  const availDomain: [number, number] = [Math.max(0, Math.floor((minAvail - 1) / 5) * 5), 100];
+  const failedBars = series.map((p) => (p.availability_pct === null ? null : Math.round(p.checks * (1 - p.availability_pct / 100))));
   if (!o) return <DashboardSkeleton />;
   const lanes = o.websites.by_lane;
   const total = o.websites.total;
@@ -59,7 +64,7 @@ export default function Overview() {
     : lanes.critical + lanes.warning === 0
       ? (noFresh ? `Nothing failing, but ${noFresh} of ${total} websites have no fresh readings.` : `All ${total} websites look healthy.`)
       : `${lanes.critical + lanes.warning} of ${total} websites need attention.`;
-  const name = me?.email.split('@')[0] ?? '';
+  const name = cap(me?.email.split('@')[0] ?? '');
 
   const siteRows = sites
     .filter((s) => s.lane !== 'healthy')
@@ -72,7 +77,7 @@ export default function Overview() {
       <header className="ux-head">
         <div>
           <h1>{greeting()}{name ? `, ${name}` : ''}</h1>
-          <p>{headline} <span style={{ color: 'var(--ink-3)' }}>Health comes from fresh readings only; missing or old readings show as Unknown, never Healthy.</span></p>
+          <p>{headline}<span className="ux-desktop-only"> Health comes from fresh readings only: missing or old readings show as Unknown, never Healthy.</span></p>
         </div>
         <div className="ux-head__actions">
           {role !== 'billing' && <a className="ux-btn ux-btn--ghost" href="/work" onClick={onLinkClick}><ListTodo aria-hidden="true" />{isStaff ? 'Work queue' : 'Issues'}</a>}
@@ -84,10 +89,12 @@ export default function Overview() {
         <MetricCard tone="blue" icon={Globe} label="Websites monitored" value={total} href="/websites"
           sub={noFresh ? `${noFresh} without fresh readings` : 'All have fresh readings'} subIcon={noFresh ? CircleAlert : CircleCheck} />
         <MetricCard tone="mint" icon={CircleCheck} label="Healthy" value={lanes.healthy} href="/websites?lane=healthy"
+          spark={availSpark} sparkDomain={availDomain} trendLabel="Trend: availability of HTTP checks per hour, last 24 hours"
           sub={total ? `${Math.round((lanes.healthy / total) * 100)}% of websites` : 'No websites yet'} />
         <MetricCard tone="orange" icon={TriangleAlert} label="Warnings" value={lanes.warning} href="/websites?lane=warning"
           sub={lanes.warning ? 'Check before they fail' : 'No warnings'} />
         <MetricCard tone="coral" icon={CircleAlert} label="Critical" value={lanes.critical} href="/websites?lane=critical"
+          bars={failedBars} trendLabel="Trend: failed HTTP checks per hour, last 24 hours"
           sub={incidents.length ? `${incidents.length} open incident${incidents.length === 1 ? '' : 's'}` : 'No open incidents'} />
         <MetricCard tone="violet" icon={Lock} label="SSL expiring ≤ 30 days" value={metrics ? expiring.length : '—'}
           sub={!metrics ? 'Loading readings' : expiring.length ? `Soonest in ${expiring[0].days} day${expiring[0].days === 1 ? '' : 's'}` : tls.length ? `Soonest in ${tls[0].days} days` : 'No certificate readings'} subIcon={CalendarClock} />
@@ -96,9 +103,9 @@ export default function Overview() {
       </div>
 
       <div className="ux-grid ux-grid--dash1">
-        <Panel title="Needs attention now" sub={`${incidents.length} open incident${incidents.length === 1 ? '' : 's'} · incidents open after 3 failed checks in a row`}
-          className="ux-attn" action={<a className="ux-link" href="/websites?lane=critical" onClick={onLinkClick}>View critical<ArrowRight aria-hidden="true" /></a>}>
-          <AttentionQueue incidents={incidents} issues={o.issues} onChanged={() => { void loadIncidents(); void loadOverview(); }} />
+        <Panel title="Needs attention now" sub={`${incidents.length} open incident${incidents.length === 1 ? '' : 's'} · an incident opens after 3 failed checks in a row`}
+          className="ux-attn" action={<a className="ux-link ux-viewall" href="/alerts" onClick={onLinkClick}>View all<ArrowRight aria-hidden="true" /></a>}>
+          <AttentionQueue incidents={incidents} issues={o.issues} onChanged={() => { void loadIncidents(); void loadOverview(); }} limit={5} />
         </Panel>
         <div className="ux-mobile-only ux-mtabs">
           <ResponsiveTabs label="Dashboard sections" value={mtab} onChange={setMtab} tabs={[
@@ -106,42 +113,46 @@ export default function Overview() {
             { key: 'activity', label: 'Activity' }, { key: 'requests', label: 'Requests', count: openRequests },
           ]} />
         </div>
-        <Panel title="Monitoring trends" className="ux-chartpanel ux-mt-trends" id="trends" sub={metrics ? `Last ${metrics.window_hours} hours · hourly averages of HTTP checks · gaps mean no readings` : 'Loading…'}
+        <Panel title="Monitoring overview" className="ux-chartpanel ux-mt-trends" id="trends" sub={metrics ? `HTTP checks of all your websites · last ${metrics.window_hours} hours, hourly` : 'Loading…'}
           action={
             <div className="ux-seg" role="group" aria-label="Chart metric">
               <button type="button" aria-pressed={chart === 'availability'} onClick={() => setChart('availability')}><Activity aria-hidden="true" />Availability</button>
               <button type="button" aria-pressed={chart === 'response'} onClick={() => setChart('response')}><Gauge aria-hidden="true" />Response time</button>
             </div>
           }>
-          <div className="ux-statrow">
-            <div><span>Availability (24 h)</span><strong>{fmtPct(totals.availability)}</strong></div>
-            <div><span>Avg response</span><strong>{fmtMs(totals.avgMs)}</strong></div>
-            <div><span>HTTP checks</span><strong>{totals.checks.toLocaleString('en-IN')}</strong></div>
-          </div>
           {metrics
             ? chart === 'availability'
-              ? <TimeSeriesChart label="Availability per hour, percent of HTTP checks that succeeded" unit="Availability (%)" color="#2563eb"
-                  points={series.map((p) => ({ t: p.hour, v: p.availability_pct, n: p.checks }))} format={(v) => `${Math.round(v * 10) / 10}%`} height={290}
-                  domain={[Math.max(0, Math.floor(Math.min(...series.map((p) => p.availability_pct ?? 100)) / 10) * 10 - 10), 100]} />
-              : <TimeSeriesChart label="Average response time per hour, milliseconds" unit="Avg response (ms)" color="#7c3aed"
-                  points={series.map((p) => ({ t: p.hour, v: p.avg_ms, n: p.checks }))} format={(v) => `${Math.round(v)} ms`} height={290} />
-            : <div className="ux-skel" style={{ height: 220 }} aria-hidden="true" />}
+              ? <TimeSeriesChart label="Availability per hour, percent of HTTP checks that succeeded" unit="Availability (%)" color="#16a34a"
+                  points={series.map((p) => ({ t: p.hour, v: p.availability_pct, n: p.checks }))} format={(v) => `${Math.round(v * 10) / 10}%`} height={256}
+                  domain={availDomain} />
+              : <TimeSeriesChart label="Average response time per hour, milliseconds" unit="Avg response (ms)" color="#2563eb"
+                  points={series.map((p) => ({ t: p.hour, v: p.avg_ms, n: p.checks }))} format={(v) => `${Math.round(v)} ms`} height={256} />
+            : <div className="ux-skel" style={{ height: 256 }} aria-hidden="true" />}
+          <div className="ux-legendrow">
+            <span><i style={{ background: '#16a34a' }} aria-hidden="true" />Availability <b>{fmtPct(totals.availability)}</b></span>
+            <span><i style={{ background: '#2563eb' }} aria-hidden="true" />Avg response <b>{fmtMs(totals.avgMs)}</b></span>
+            <span><i style={{ background: '#94a3b8' }} aria-hidden="true" />HTTP checks <b>{totals.checks.toLocaleString('en-IN')}</b></span>
+            <span className="ux-chartnote">Gaps mean no readings</span>
+          </div>
         </Panel>
       </div>
 
-      <div className="ux-grid ux-grid--dash1">
-        <Panel title="Websites needing attention" className="ux-mt-websites" sub="Availability and response over the last 24 hours"
-          action={<a className="ux-link" href="/websites" onClick={onLinkClick}>All websites<ArrowRight aria-hidden="true" /></a>}>
+      <div className="ux-grid ux-grid--dash2">
+        <Panel title="Top affected websites" className="ux-mt-websites" sub="Availability and response, last 24 hours"
+          action={<a className="ux-link ux-viewall" href="/websites" onClick={onLinkClick}>View all<ArrowRight aria-hidden="true" /></a>}>
           {siteRows.length === 0
             ? <p className="ux-note" style={{ marginTop: 0 }}>Every website is healthy right now.</p>
             : (
               <div className="ux-table-wrap">
-                <table className="ux-table ux-table--cards">
-                  <thead><tr><th scope="col">Website</th><th scope="col">Health</th><th scope="col" className="num">Availability</th><th scope="col" className="num">Response</th><th scope="col" className="num">SSL</th></tr></thead>
+                <table className="ux-table ux-table--cards ux-top">
+                  <thead><tr><th scope="col">Website</th><th scope="col">Health</th><th scope="col" className="num">Uptime</th><th scope="col" className="num">Response</th><th scope="col" className="num">SSL</th></tr></thead>
                   <tbody>
                     {siteRows.map((s) => {
                       const m = metrics?.websites[s.id];
                       const sslDays = m?.tls_days_left;
+                      const av = m?.availability_pct;
+                      const avTone = av === null || av === undefined ? 'unknown' : av >= 99.5 ? 'healthy' : av >= 97 ? 'warning' : 'critical';
+                      const msTone = !m?.avg_ms ? 'unknown' : m.avg_ms < 800 ? 'healthy' : m.avg_ms < 1500 ? 'warning' : 'critical';
                       return (
                         <tr key={s.id}>
                           <td>
@@ -154,8 +165,8 @@ export default function Overview() {
                             </span>
                           </td>
                           <td><StatusBadge status={LANE_STATUS[s.lane]} /></td>
-                          <td className="num" data-label="Availability">{fmtPct(m?.availability_pct, 1)}</td>
-                          <td className="num" data-label="Response">{fmtMs(m?.avg_ms)}</td>
+                          <td className="num" data-label="Uptime"><span className={`ux-num-pill ux-tint--${avTone}`}>{fmtPct(av, 1)}</span></td>
+                          <td className="num" data-label="Response"><span className={`ux-num-pill ux-tint--${msTone}`}>{fmtMs(m?.avg_ms)}</span></td>
                           <td className="num" data-label="SSL">{sslDays === null || sslDays === undefined ? '—' : sslDays < 0 ? 'Expired' : `${sslDays} d`}</td>
                         </tr>
                       );
@@ -165,7 +176,7 @@ export default function Overview() {
               </div>
             )}
         </Panel>
-        <Panel title="Websites by health" sub="Computed from fresh readings" className="ux-mt-trends">
+        <Panel title="Health breakdown" sub="Websites by computed health" className="ux-mt-trends">
           <Donut centerLabel="websites" total={total} segments={LANES.slice().reverse().map((l: HealthLane) => ({ key: l, label: LANE_LABEL[l], value: lanes[l], color: LANE_COLOR[l] }))}
             legendAction={(s) => (lanes[s.key as HealthLane] ? () => navigate(`/websites?lane=${s.key}`) : undefined)} />
           <h3 className="ux-h3">Current problems by area</h3>
@@ -173,9 +184,9 @@ export default function Overview() {
         </Panel>
       </div>
 
-      <div className="ux-grid ux-grid--dash3">
+      <div className="ux-grid ux-grid--dash4">
         <Panel title="Support requests" className="ux-mt-requests" sub="Workflow stage, separate from website health"
-          action={role !== 'billing' ? <a className="ux-link" href="/work" onClick={onLinkClick}>{isStaff ? 'Open the work queue' : 'Open issues'}<ArrowRight aria-hidden="true" /></a> : undefined}>
+          action={role !== 'billing' ? <a className="ux-link ux-viewall" href="/work" onClick={onLinkClick}>{isStaff ? 'Work queue' : 'Issues'}<ArrowRight aria-hidden="true" /></a> : undefined}>
           <ol className="ux-pipeline" aria-label="Open requests by stage">
             {openByState.map(([s, n]) => (
               <li key={s} data-empty={n === 0 || undefined}>
@@ -188,7 +199,7 @@ export default function Overview() {
           {o.requests.awaiting_quote_decision.length > 0 && (
             <>
               <h3 className="ux-h3">{isStaff ? 'Waiting for the customer to decide' : 'Waiting for your decision'}</h3>
-              <ul className="ux-list">
+              <ul className="ux-list ux-list--compact">
                 {o.requests.awaiting_quote_decision.map((t) => (
                   <li key={t.id}>
                     <span className="ux-list__icon ux-tint--info" aria-hidden="true"><LifeBuoy /></span>
@@ -203,11 +214,11 @@ export default function Overview() {
             </>
           )}
         </Panel>
-        <Panel title={isStaff ? 'Your work' : 'Certificates'} className={isStaff ? 'ux-mt-requests' : 'ux-mt-trends'}
-          sub={isStaff ? 'Requests assigned to you, and upcoming renewals' : 'Days until each certificate expires'}>
-          {isStaff ? (
-            o.requests.assigned_to_me.length === 0 ? <p className="ux-note" style={{ marginTop: 0 }}>Nothing assigned to you.</p> : (
-              <ul className="ux-list">
+        <Panel title={isStaff ? 'Your work and renewals' : 'Certificate renewals'} className={isStaff ? 'ux-mt-requests' : 'ux-mt-trends'}
+          sub={isStaff ? 'Requests assigned to you, and certificates that expire soonest' : 'Days until each certificate expires'}>
+          {isStaff && (
+            o.requests.assigned_to_me.length === 0 ? <p className="ux-note" style={{ marginTop: 0, marginBottom: 10 }}>Nothing assigned to you.</p> : (
+              <ul className="ux-list ux-list--compact" style={{ marginBottom: 10 }}>
                 {o.requests.assigned_to_me.map((t) => (
                   <li key={t.id}>
                     <span className="ux-list__icon ux-tint--investigating" aria-hidden="true"><ListTodo /></span>
@@ -220,11 +231,11 @@ export default function Overview() {
                 ))}
               </ul>
             )
-          ) : <CertList items={tls} />}
-          {isStaff && <><h3 className="ux-h3">Certificate renewals</h3><CertList items={tls.slice(0, 3)} /></>}
+          )}
+          <CertList items={isStaff ? tls.slice(0, 3) : tls} />
         </Panel>
         <Panel title="Recent activity" className="ux-mt-activity" sub="Incidents and request updates">
-          <ActivityTimeline items={metrics?.activity} limit={7} />
+          <ActivityTimeline items={metrics?.activity} limit={5} />
         </Panel>
       </div>
       {metrics && <p className="ux-note">Readings updated {since(new Date(metrics.generated_at))}. Times in IST.</p>}

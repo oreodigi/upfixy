@@ -3,7 +3,7 @@
 // a missing value renders as a gap, "—" or an explicit "No readings" state.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
-  CircleAlert, CircleCheck, CircleDashed, CircleHelp, Info, Microscope, Plus, TriangleAlert, ChevronDown,
+  CircleAlert, CircleCheck, CircleDashed, CircleHelp, Info, Microscope, Plus, TriangleAlert, ChevronDown, EllipsisVertical,
   type LucideIcon,
 } from 'lucide-react';
 import { api, type ApiMetrics } from '../api';
@@ -34,19 +34,32 @@ export function StatusBadge({ status, label, className = '' }: { status: UiStatu
 // ------------------------------------------------------------------ metric card
 export type Tone = 'blue' | 'aqua' | 'mint' | 'orange' | 'violet' | 'coral';
 
-export function MetricCard({ tone, icon: Icon, label, value, sub, subIcon: SubIcon, href, spark, ariaLabel }: {
+/**
+ * KPI card (reference composition: icon disc, label, big value, tiny trend). The trend
+ * is drawn only from a REAL series (`spark` line or `bars`); `trendLabel` says what it is.
+ */
+export function MetricCard({ tone, icon: Icon, label, value, sub, subIcon: SubIcon, href, spark, bars, trendLabel, sparkDomain, ariaLabel }: {
   tone: Tone; icon: LucideIcon; label: string; value: React.ReactNode; sub?: React.ReactNode; subIcon?: LucideIcon;
-  href?: string; spark?: Array<number | null>; ariaLabel?: string;
+  href?: string; spark?: Array<number | null>; bars?: Array<number | null>; trendLabel?: string; sparkDomain?: [number, number]; ariaLabel?: string;
 }) {
+  const hasSpark = !!spark && spark.filter((v) => v !== null).length > 1;
+  const hasBars = !!bars && bars.some((v) => v !== null && v > 0);
   const body = (
     <>
       <span className="ux-kpi__icon" aria-hidden="true"><Icon /></span>
       <span className="ux-kpi__body">
         <span className="ux-kpi__label">{label}</span>
-        <span className="ux-kpi__value">{value}</span>
-        {sub && <span className="ux-kpi__sub">{SubIcon && <SubIcon aria-hidden="true" />}{sub}</span>}
+        <span className="ux-kpi__row">
+          <span className="ux-kpi__value">{value}</span>
+          {(hasSpark || hasBars) && (
+            <span className="ux-kpi__trend" title={trendLabel}>
+              {hasSpark ? <Sparkline values={spark!} className="ux-kpi__spark" domain={sparkDomain} area /> : <MiniBars values={bars!} className="ux-kpi__spark" />}
+              {trendLabel && <span className="sr-only">{trendLabel}</span>}
+            </span>
+          )}
+        </span>
+        {sub && <span className="ux-kpi__sub">{SubIcon && <SubIcon aria-hidden="true" />}<span>{sub}</span></span>}
       </span>
-      {spark && spark.some((v) => v !== null) && <Sparkline values={spark} className="ux-kpi__spark" />}
     </>
   );
   return href
@@ -54,25 +67,103 @@ export function MetricCard({ tone, icon: Icon, label, value, sub, subIcon: SubIc
     : <div className={`ux-kpi ux-kpi--${tone}`} aria-label={ariaLabel} role={ariaLabel ? 'group' : undefined}>{body}</div>;
 }
 
+// ------------------------------------------------------------------ curves
+/** Monotone cubic path through points (no overshoot, so 100% never draws above 100%). */
+export function smoothPath(pts: Array<[number, number]>): string {
+  const n = pts.length;
+  if (n === 0) return '';
+  if (n < 3) return pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
+  const dx: number[] = [], m: number[] = [];
+  for (let i = 0; i < n - 1; i++) { dx.push(pts[i + 1][0] - pts[i][0]); m.push((pts[i + 1][1] - pts[i][1]) / (dx[i] || 1)); }
+  const t: number[] = [m[0]];
+  for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (3 * (dx[i - 1] + dx[i])) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]));
+  t.push(m[n - 2]);
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], h = dx[i] / 3;
+    d += `C${(x0 + h).toFixed(1)},${(y0 + t[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)},${(y1 - t[i + 1] * h).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+  }
+  return d;
+}
+
 // ------------------------------------------------------------------ sparkline
 /** Decorative trend of a REAL series; gaps (null) break the line. Hidden from assistive tech; the value is in text nearby. */
-export function Sparkline({ values, className = 'ux-spark', color = 'currentColor' }: { values: Array<number | null>; className?: string; color?: string }) {
+export function Sparkline({ values, className = 'ux-spark', color = 'currentColor', domain, area = false }: {
+  values: Array<number | null>; className?: string; color?: string; domain?: [number, number]; area?: boolean;
+}) {
+  const gid = useId().replace(/:/g, '');
   const nums = values.filter((v): v is number => v !== null);
   if (nums.length < 2) return null;
-  const W = 100, H = 30, min = Math.min(...nums), max = Math.max(...nums), span = max - min || 1;
+  const W = 100, H = 32;
+  const min = domain ? domain[0] : Math.min(...nums), max = domain ? domain[1] : Math.max(...nums), span = max - min || 1;
   const x = (i: number) => (i / Math.max(values.length - 1, 1)) * W;
-  const y = (v: number) => H - 3 - ((v - min) / span) * (H - 6);
-  const segs: string[] = [];
-  let cur = '';
-  values.forEach((v, i) => {
-    if (v === null) { if (cur) segs.push(cur); cur = ''; return; }
-    cur += `${cur ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
-  });
-  if (cur) segs.push(cur);
+  const y = (v: number) => H - 3 - ((Math.min(Math.max(v, min), max) - min) / span) * (H - 6);
+  const runs: Array<Array<[number, number]>> = [];
+  let cur: Array<[number, number]> = [];
+  values.forEach((v, i) => { if (v === null) { if (cur.length) runs.push(cur); cur = []; } else cur.push([x(i), y(v)]); });
+  if (cur.length) runs.push(cur);
   return (
     <svg className={className} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      {segs.map((d, i) => <path key={i} d={d} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />)}
+      {area && <defs><linearGradient id={`s${gid}`} x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={color} stopOpacity=".28" /><stop offset="1" stopColor={color} stopOpacity="0" /></linearGradient></defs>}
+      {area && runs.filter((r) => r.length > 1).map((r, i) => (
+        <path key={`a${i}`} d={`${smoothPath(r)}L${r[r.length - 1][0]},${H}L${r[0][0]},${H}Z`} fill={`url(#s${gid})`} stroke="none" />
+      ))}
+      {runs.map((r, i) => r.length > 1 && <path key={i} d={smoothPath(r)} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />)}
     </svg>
+  );
+}
+
+/** Tiny bar trend of a REAL count series (e.g. failed checks per hour). */
+export function MiniBars({ values, className = 'ux-spark', color = 'currentColor' }: { values: Array<number | null>; className?: string; color?: string }) {
+  const max = Math.max(1, ...values.map((v) => v ?? 0));
+  const W = 100, H = 32, bw = W / Math.max(values.length, 1);
+  return (
+    <svg className={className} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      {values.map((v, i) => {
+        const h = v ? Math.max(3, (v / max) * (H - 2)) : 1.5;
+        return <rect key={i} x={i * bw + bw * 0.18} y={H - h} width={bw * 0.64} height={h} rx={Math.min(1.5, bw * 0.3)} fill={color} opacity={v ? 0.9 : 0.22} />;
+      })}
+    </svg>
+  );
+}
+
+// ------------------------------------------------------------------ menu
+/** Accessible "⋮" menu for secondary card actions (keyboard: Enter/Space opens, Esc closes, arrows move). */
+export function KebabMenu({ label, items }: { label: string; items: Array<{ label: string; onSelect: () => void; icon?: LucideIcon } | false | null | undefined> }) {
+  const list = items.filter(Boolean) as Array<{ label: string; onSelect: () => void; icon?: LucideIcon }>;
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    root.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus();
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  if (!list.length) return null;
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { setOpen(false); root.current?.querySelector<HTMLButtonElement>('.ux-kebab__btn')?.focus(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const els = [...(root.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]') ?? [])];
+      const i = els.indexOf(document.activeElement as HTMLButtonElement);
+      els[(i + (e.key === 'ArrowDown' ? 1 : -1) + els.length) % els.length]?.focus();
+    }
+  };
+  return (
+    <div className="ux-kebab" ref={root} onKeyDown={onKey}>
+      <button type="button" className="ux-kebab__btn" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>
+        <EllipsisVertical aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="ux-menu ux-kebab__menu" role="menu" aria-label={label}>
+          {list.map((it) => {
+            const I = it.icon;
+            return <button key={it.label} type="button" role="menuitem" onClick={() => { setOpen(false); it.onSelect(); }}>{I && <I aria-hidden="true" width={16} />}{it.label}</button>;
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -112,7 +203,7 @@ export function TimeSeriesChart({ points, unit, color, label, format, domain, he
   const [hover, setHover] = useState<number | null>(null);
   const gid = useId().replace(/:/g, '');
   const nums = points.map((p) => p.v).filter((v): v is number => v !== null);
-  const pad = { l: 44, r: 10, t: 12, b: 26 };
+  const pad = { l: 46, r: 12, t: 14, b: 28 };
   const W = Math.max(width, 260), H = height;
   const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
   const [lo, hi] = domain ?? [0, niceMax(Math.max(...nums, 1) * 1.15)];
@@ -127,8 +218,9 @@ export function TimeSeriesChart({ points, unit, color, label, format, domain, he
     run.push([x(i), y(p.v)]);
   });
   if (run.length) runs.push(run);
-  const line = (r: Array<[number, number]>) => r.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join('');
+  const line = (r: Array<[number, number]>) => smoothPath(r);
   const area = (r: Array<[number, number]>) => `${line(r)}L${r[r.length - 1][0].toFixed(1)},${pad.t + ih}L${r[0][0].toFixed(1)},${pad.t + ih}Z`;
+  const every = W < 480 ? 8 : 4;
   const hh = (t: string) => new Date(t).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
 
   const onMove = useCallback((e: React.PointerEvent<SVGRectElement>) => {
@@ -147,7 +239,8 @@ export function TimeSeriesChart({ points, unit, color, label, format, domain, he
           <svg width={W} height={H} role="img" aria-label={`${label}. Table below.`}>
             <defs>
               <linearGradient id={`g${gid}`} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity=".28" />
+                <stop offset="0%" stopColor={color} stopOpacity=".32" />
+                <stop offset="60%" stopColor={color} stopOpacity=".08" />
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
             </defs>
@@ -157,12 +250,12 @@ export function TimeSeriesChart({ points, unit, color, label, format, domain, he
                 <text className="ux-chart__axis" x={pad.l - 8} y={y(t) + 4} textAnchor="end">{format(t)}</text>
               </g>
             ))}
-            {points.map((p, i) => (i % 6 === 0 || i === points.length - 1) && (
+            {points.map((p, i) => ((i % every === 0 && points.length - 1 - i >= every / 2) || i === points.length - 1) && (
               <text key={p.t} className="ux-chart__axis" x={x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}>{hh(p.t)}</text>
             ))}
             {runs.map((r, i) => r.length > 1 && <path key={`a${i}`} d={area(r)} fill={`url(#g${gid})`} />)}
             {runs.map((r, i) => r.length > 1
-              ? <path key={`l${i}`} d={line(r)} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              ? <path key={`l${i}`} className="ux-chart__line" d={line(r)} fill="none" stroke={color} strokeWidth="2.75" strokeLinejoin="round" strokeLinecap="round" />
               : <circle key={`l${i}`} cx={r[0][0]} cy={r[0][1]} r="3" fill={color} />)}
             {hp && (
               <g>

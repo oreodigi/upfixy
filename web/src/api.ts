@@ -48,7 +48,7 @@ export interface ApiTicket {
   has_quote: boolean;
   approved: boolean;
 }
-export interface ApiWorkspace { id: string; name: string; kind: 'solo' | 'agency'; role: string; closed_at?: string | null }
+export interface ApiWorkspace { id: string; name: string; kind: 'solo' | 'agency'; role: string; closed_at?: string | null; is_demo?: boolean }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown, public code?: string) { super(message); }

@@ -1,4 +1,14 @@
-# UI redesign: status (phase 1)
+# UI redesign: status (phase 1, revision 2)
+
+**Revision 2 (19 Oct 2026)** moves UX-01…03 closer to the founder references:
+- KPI cards: gradient icon discs, larger values, and trends drawn only from real hourly series (Healthy = availability per hour; Critical = failed checks per hour).
+- Dashboard rows follow R2: monitoring overview + attention list, then top affected websites + health breakdown, then requests, renewals and activity. Smooth (monotone) chart curves that never overshoot 100%.
+- Client board: urgent issues, workload and quick actions sit beside the lanes from 1280 px (R3). Area chips use a status shape (✓ ! ? ○) plus the area name, never colour alone.
+- Website board: secondary actions move to a "⋮" menu; Help me understand and Analyze & find solution are the card buttons (R4). On phones, cards show three key numbers and a "Technical details" disclosure.
+- AC-UI-12: workspaces created by the dev seed carry `is_demo` (migration 0017; only the schema owner can set it) and show a "Demonstration data" banner.
+- Search: Ctrl/⌘ K or "/" focuses it. The tagline is "Monitor · Diagnose · Resolve".
+- Demo history now differs per website, so sparklines aren't identical copies.
+
 
 Spec: [UI_REDESIGN_DIRECTION.md](UI_REDESIGN_DIRECTION.md). References: [design/references](design/references/README.md).
 
@@ -43,4 +53,3 @@ It is covered by `MetricsTest` (values, null gaps, workspace isolation, client-o
 
 - UX-04…08 (website detail, diagnostics, work queue, quote and resolution, settings, alerts): these still use the earlier styles inside the new shell.
 - Checks at 768 px and 1920 px, and on real devices with a screen reader (AC-UI-09).
-- A visible "demo data" banner for seeded workspaces (AC-UI-12): the live app only ever shows real data from the API. The `?demo` build keeps its existing label.

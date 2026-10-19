@@ -37,7 +37,7 @@ const tech = await user('tech');
 const clientUser = await user('client');
 
 async function workspace(name, kind) {
-  const ws = (await one('INSERT INTO workspaces(name, kind) VALUES ($1, $2) RETURNING id', [name, kind])).id;
+  const ws = (await one('INSERT INTO workspaces(name, kind, is_demo) VALUES ($1, $2, true) RETURNING id', [name, kind])).id;   // AC-UI-12: labelled demo
   await db.query("INSERT INTO memberships(workspace_id, user_id, role) VALUES ($1, $2, 'owner')", [ws, owner]);
   return ws;
 }
@@ -85,19 +85,23 @@ async function site(ws, client, host, readings, { active = true } = {}) {
   // current reading: a site failing now failed for its last few checks; "not checked" leaves a gap.
   const http = seen.find(([k]) => k === 'http');
   if (active && http) {
-    const base = 180 + (host.length * 37) % 520;
+    let hsh = 0; for (const ch of host) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    const base = 180 + (hsh % 520);
+    const phase = (hsh % 628) / 100;          // per-site shape, so demo sparklines differ
+    const spike = 10 + (hsh % 70);            // a busy period at a different hour per site
     const failing = http[1] === 'critical';
     const silentAfter = http[3] === 'HTTP_NOT_CHECKED' ? 6 * 60 : 0;   // no HTTP readings in the last 6 h
     await db.query(`INSERT INTO observations(workspace_id, monitor_target_id, check_kind, cycle_no, severity, result_code, observed_at, detail, region)
       SELECT $1, $2, 'http', -k,
-             (CASE WHEN $4 AND k <= 3 THEN 'critical' WHEN k BETWEEN 41 AND 43 AND $3 > 600 THEN 'warning' ELSE 'ok' END)::signal_severity,
-             CASE WHEN $4 AND k <= 3 THEN 'HTTP_503' WHEN k BETWEEN 41 AND 43 AND $3 > 600 THEN 'HTTP_SLOW' ELSE 'HTTP_OK' END,
+             (CASE WHEN $4 AND k <= 3 THEN 'critical' WHEN k BETWEEN $7 AND $7 + 2 AND $3 > 600 THEN 'warning' ELSE 'ok' END)::signal_severity,
+             CASE WHEN $4 AND k <= 3 THEN 'HTTP_503' WHEN k BETWEEN $7 AND $7 + 2 AND $3 > 600 THEN 'HTTP_SLOW' ELSE 'HTTP_OK' END,
              now() - make_interval(mins => k * 15 + 2),
              jsonb_build_object('status', CASE WHEN $4 AND k <= 3 THEN 503 ELSE 200 END,
-                                'ms_total', greatest(60, ($3 * (1 + 0.22 * sin(k / 3.5)) + (k % 7) * 9 + CASE WHEN k BETWEEN 40 AND 44 THEN $3 * 1.8 ELSE 0 END)::int)),
+                                'ms_total', greatest(60, ($3 * (1 + 0.18 * sin(k / 5.0 + $6) + 0.08 * sin(k / 1.7 + $6 * 2)) + (k % 7) * 9
+                                  + CASE WHEN k BETWEEN $7 AND $7 + 4 THEN $3 * 0.9 * (1 - abs(k - $7 - 2) / 3.0) ELSE 0 END)::int)),
              'dev-local'
         FROM generate_series(1, 95) k
-       WHERE k * 15 > $5`, [ws, t, base, failing, silentAfter]);
+       WHERE k * 15 > $5`, [ws, t, base, failing, silentAfter, phase, spike]);
   }
   return { w, t };
 }

@@ -1,5 +1,5 @@
 import { Bell, Building2, CreditCard, Globe, LayoutDashboard, ListTodo, Plug, Settings, Users, type LucideIcon } from 'lucide-react';
-import { MobileBottomNav, MobileTopbar, Sidebar, Topbar, type ShellNavItem } from './ui/Shell';
+import { DemoBanner, MobileBottomNav, MobileTopbar, Sidebar, Topbar, type ShellNavItem } from './ui/Shell';
 import { RepairControls } from './pages/Repairs';
 import { Integration, Integrations } from './pages/Integrations';
 import Billing from './pages/Billing';
@@ -323,12 +323,14 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
       <div className="ux-app">
         <a className="skip" href="#main">Skip to content</a>
         <StepUpDialog />
-        <Sidebar primary={shell(primary)} secondary={shell(secondary)} switcher={switcher} workspaceKind={current?.kind} />
+        <Sidebar primary={shell(primary)} secondary={shell(secondary)} switcher={switcher} workspaceKind={current?.kind} siteCount={loaded ? sites.length : undefined} />
         <div className="ux-content">
         <MobileTopbar title={pageTitle} subtitle={current?.name ?? 'Loading…'} unread={unread} />
         <Topbar email={me?.email ?? ''} role={role} unread={unread} onSignOut={onSignOut}
-          searchPlaceholder={isAgency ? 'Search websites, domains or clients' : 'Search your websites'} />
+          searchPlaceholder={isAgency ? 'Search websites, domains or clients' : 'Search your websites'}
+          period={['overview', 'clients', 'websites'].includes(r.name) ? 'Charts: last 24 hours' : undefined} />
         <EmailBanner me={me} />
+        {current?.is_demo && <DemoBanner />}
 
         <main className="ux-main" id="main" tabIndex={-1}>
           {error && <p className="error" role="alert">{error}</p>}
