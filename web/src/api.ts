@@ -121,7 +121,8 @@ export interface ApiQuote {
   params?: Record<string, unknown> & { operation?: string }; approval_id?: string | null;
 }
 export interface ApiTicketDetail {
-  id: string; title: string; state: TicketState; version: number; website_id: string;
+  id: string; title: string; state: TicketState; version: number; website_id: string; website?: string; created_at?: string;
+  diagnostic_run_id?: string | null; events?: Array<{ from_state: TicketState | null; to_state: TicketState; reason: string | null; actor_id: string | null; created_at: string }>;
   assignee_id: string | null; assignee_email: string | null; allowed_next: TicketState[]; quote: ApiQuote | null;
 }
 export interface ApiAction { code: string; label: string; tier: string; price_paise: number | null }
@@ -195,6 +196,7 @@ export interface ApiDiagnosis {
         findings?: ApiAiFinding[]; missing_information?: string[];
         audit?: { model: string | null; prompt_version: string; schema_version: string; rejection_reasons: string[]; latency_ms: number | null } };
   rule_version?: string;
+  tickets?: Array<{ id: string; title: string; state: TicketState }>;
 }
 
 // ----------------------------------------------------------------- M7 types

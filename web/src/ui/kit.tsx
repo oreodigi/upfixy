@@ -50,7 +50,7 @@ export function MetricCard({ tone, icon: Icon, label, value, sub, subIcon: SubIc
       <span className="ux-kpi__body">
         <span className="ux-kpi__label">{label}</span>
         <span className="ux-kpi__row">
-          <span className="ux-kpi__value">{value}</span>
+          <span className={`ux-kpi__value${typeof value === 'string' && /[a-z]{4,}/i.test(value) && !/^\d/.test(value) ? ' ux-kpi__value--text' : ''}`}>{value}</span>
           {(hasSpark || hasBars) && (
             <span className="ux-kpi__trend" title={trendLabel}>
               {hasSpark ? <Sparkline values={spark!} className="ux-kpi__spark" domain={sparkDomain} area /> : <MiniBars values={bars!} className="ux-kpi__spark" />}
