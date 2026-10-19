@@ -37,7 +37,7 @@ const tech = await user('tech');
 const clientUser = await user('client');
 
 async function workspace(name, kind) {
-  const ws = (await one('INSERT INTO workspaces(name, kind) VALUES ($1, $2) RETURNING id', [name, kind])).id;
+  const ws = (await one('INSERT INTO workspaces(name, kind, is_demo) VALUES ($1, $2, true) RETURNING id', [name, kind])).id;   // AC-UI-12: labelled demo
   await db.query("INSERT INTO memberships(workspace_id, user_id, role) VALUES ($1, $2, 'owner')", [ws, owner]);
   return ws;
 }
@@ -46,7 +46,8 @@ async function workspace(name, kind) {
 function evidence(kind, host, code) {
   if (kind === 'http') {
     const status = code === 'HTTP_OK' ? 200 : Number(code.replace('HTTP_', '')) || null;
-    return status ? { chain: [{ url: `https://${host}/`, ip: '203.0.113.10', status, ms: 340 }], status, ms_total: 340, ms_ttfb: 280, ms_connect: 40, bytes: 48213, content_type: 'text/html; charset=UTF-8', attempts: 1, outcome: status >= 500 ? 'target_failure' : 'ok' }
+    const ms = 180 + (host.length * 37) % 520;
+    return status ? { chain: [{ url: `https://${host}/`, ip: '203.0.113.10', status, ms }], status, ms_total: ms, ms_ttfb: Math.round(ms * 0.8), ms_connect: 40, bytes: 48213, content_type: 'text/html; charset=UTF-8', attempts: 1, outcome: status >= 500 ? 'target_failure' : 'ok' }
       : { chain: [{ url: `https://${host}/`, ip: '203.0.113.10', error: code }], attempts: 3, outcome: 'target_failure' };
   }
   if (kind === 'tls') {
@@ -78,6 +79,29 @@ async function site(ws, client, host, readings, { active = true } = {}) {
                       VALUES ($1, $2, $3, 1, $4, $5, now() - make_interval(mins => $6), $7, $8, 'dev-local')`,
         [ws, t, kind, sev, code, m, JSON.stringify(evidence(kind, host, code)), run]);
     }
+  }
+  // 24 h of synthetic HTTP history every 15 min (DEMO DATA), so charts have something to draw.
+  // Negative cycle numbers keep it older than the live worker's cycles. Behaviour follows the
+  // current reading: a site failing now failed for its last few checks; "not checked" leaves a gap.
+  const http = seen.find(([k]) => k === 'http');
+  if (active && http) {
+    let hsh = 0; for (const ch of host) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    const base = 180 + (hsh % 520);
+    const phase = (hsh % 628) / 100;          // per-site shape, so demo sparklines differ
+    const spike = 10 + (hsh % 70);            // a busy period at a different hour per site
+    const failing = http[1] === 'critical';
+    const silentAfter = http[3] === 'HTTP_NOT_CHECKED' ? 6 * 60 : 0;   // no HTTP readings in the last 6 h
+    await db.query(`INSERT INTO observations(workspace_id, monitor_target_id, check_kind, cycle_no, severity, result_code, observed_at, detail, region)
+      SELECT $1, $2, 'http', -k,
+             (CASE WHEN $4 AND k <= 3 THEN 'critical' WHEN k BETWEEN $7 AND $7 + 2 AND $3 > 600 THEN 'warning' ELSE 'ok' END)::signal_severity,
+             CASE WHEN $4 AND k <= 3 THEN 'HTTP_503' WHEN k BETWEEN $7 AND $7 + 2 AND $3 > 600 THEN 'HTTP_SLOW' ELSE 'HTTP_OK' END,
+             now() - make_interval(mins => k * 15 + 2),
+             jsonb_build_object('status', CASE WHEN $4 AND k <= 3 THEN 503 ELSE 200 END,
+                                'ms_total', greatest(60, ($3 * (1 + 0.18 * sin(k / 5.0 + $6) + 0.08 * sin(k / 1.7 + $6 * 2)) + (k % 7) * 9
+                                  + CASE WHEN k BETWEEN $7 AND $7 + 4 THEN $3 * 0.9 * (1 - abs(k - $7 - 2) / 3.0) ELSE 0 END)::int)),
+             'dev-local'
+        FROM generate_series(1, 95) k
+       WHERE k * 15 > $5`, [ws, t, base, failing, silentAfter, phase, spike]);
   }
   return { w, t };
 }
@@ -189,6 +213,14 @@ for (const u of [owner, tech]) {
 // ------------------------------------------------------- solo workspace
 const solo = await workspace('Demo Solo', 'solo');
 await site(solo, null, 'my-portfolio.in', [['http', 'ok', 3, 'HTTP_OK'], ['tls', 'warning', 3, 'TLS_EXPIRING'], ['dns', 'ok', 3, 'DNS_OK']]);
+
+// A solo owner with several websites (UX-03 website board review). DEMO DATA.
+const soloMany = await workspace('Demo Solo, several sites', 'solo');
+await site(soloMany, null, 'priya-bakes.in', ok(2));
+await site(soloMany, null, 'order.priya-bakes.in', [['http', 'critical', 3, 'HTTP_503'], ['tls', 'ok', 3, 'TLS_OK'], ['dns', 'ok', 3, 'DNS_OK']]);
+await site(soloMany, null, 'priya-photography.com', [['http', 'ok', 2, 'HTTP_OK'], ['tls', 'warning', 2, 'TLS_EXPIRING'], ['dns', 'ok', 2, 'DNS_OK']]);
+await site(soloMany, null, 'blog.priya-bakes.in', ok(1));
+await site(soloMany, null, 'old-recipes.in', ok(52));
 
 // -------------------------------------------------- load-test workspace
 if (bigSites > 0) {

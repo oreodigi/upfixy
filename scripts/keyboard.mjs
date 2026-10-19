@@ -22,8 +22,8 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   await p.keyboard.press('Enter');
   // 2. Reach "Work" nav link by keyboard and open it.
   let found=false;
-  for (let i=0;i<80 && !found;i++){ await p.keyboard.press('Tab'); found = await p.evaluate(()=>{const a=document.activeElement; return a?.tagName==='A' && a.textContent?.trim().endsWith('Work queue') && getComputedStyle(a).display!=='none';}); }
-  ok(`${tag}: Work queue nav reachable by Tab`, found);
+  for (let i=0;i<80 && !found;i++){ await p.keyboard.press('Tab'); found = await p.evaluate(()=>{const a=document.activeElement; return a?.tagName==='A' && /Work( queue)?$/.test(a.textContent?.trim()??'') && a.getAttribute('href')==='/work' && getComputedStyle(a).display!=='none';}); }
+  ok(`${tag}: Work nav reachable by Tab`, found);
   if (found) { await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle'); }
   ok(`${tag}: Enter navigates to /work`, p.url().endsWith('/work'));
   // 3. Move a ticket with keyboard only: focus first "Move to" select, choose with arrows.
@@ -42,16 +42,19 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   // 5. Mobile More sheet.
   if (tag==='mobile') {
     await p.getByRole('button',{name:'More'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(200);
-    ok('mobile: More opens sheet with Settings link', await p.getByRole('link',{name:/Settings/}).isVisible());
+    ok('mobile: More opens sheet with Settings link', await p.locator('.ux-sheet').getByRole('link',{name:/Settings/}).isVisible());
     await p.keyboard.press('Escape'); await p.waitForTimeout(200);
-    ok('mobile: Escape closes More sheet', !(await p.locator('.sheet').count()));
+    ok('mobile: Escape closes More sheet', !(await p.locator('.ux-sheet').count()));
   }
   // 6. Lane chips toggle with keyboard.
   await p.goto(B+'/websites',{waitUntil:'networkidle'});
   const chip = p.getByRole('button',{name:/^Critical/}).first(); await chip.focus(); await p.keyboard.press('Space'); await p.waitForTimeout(150);
   ok(`${tag}: Space toggles lane chip`, (await chip.getAttribute('aria-pressed'))==='true');
   // 7. Back button restores previous page.
-  await p.goto(B+'/clients',{waitUntil:'networkidle'}); await p.getByRole('link',{name:'Mitra Traders'}).first().click(); await p.waitForLoadState('networkidle');
+  await p.goto(B+'/clients',{waitUntil:'networkidle'});
+  // Phones show one lane at a time: pick the Warning lane where Mitra Traders sits.
+  if (tag==='mobile') await p.locator('.ux-lanepick button:visible',{hasText:'Warning'}).first().click();
+  await p.locator('a:visible',{hasText:'Mitra Traders'}).first().click(); await p.waitForLoadState('networkidle');
   await p.goBack(); await p.waitForTimeout(200);
   ok(`${tag}: browser Back returns to /clients`, p.url().endsWith('/clients'));
   // 8. Deep link renders directly.
@@ -59,19 +62,19 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   ok(`${tag}: deep link ?lane=critical pre-selects chip`, (await p.getByRole('button',{name:/^Critical/}).first().getAttribute('aria-pressed'))==='true');
   // 9. M3: open evidence details and queue a live check from the keyboard.
   await p.goto(B+'/websites',{waitUntil:'networkidle'});
-  await p.getByRole('link',{name:/mitratraders/}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
+  await p.goto(B+'/websites?q=mitratraders',{waitUntil:'networkidle'}); await p.getByRole('link',{name:/mitratraders/}).filter({visible:true}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
   await p.getByRole('tab',{name:'Activity',exact:true}).focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
-  const sum = p.locator('details.evidence summary').first(); await sum.focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
-  ok(`${tag}: Enter opens evidence details`, await p.locator('details.evidence[open] .facts').first().isVisible());
+  const sum = p.locator('details.ux-details summary').filter({visible:true}).first(); await sum.focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
+  ok(`${tag}: Enter opens evidence details`, await p.locator('details.ux-details[open] dl.kv').first().isVisible());
   await p.getByRole('button',{name:'Check now'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(500);
-  ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.headline [role=status]').innerText()));
+  ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.ux-sitehead__status').innerText()));
   // 9b. M5: Analyze from the keyboard opens the report, which has no "Fix now".
   await p.goto(B+'/websites',{waitUntil:'networkidle'});
-  await p.getByRole('link',{name:/kalaghar-jewels\.com/}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
-  await p.getByRole('button',{name:'Analyze & find solution'}).focus(); await p.keyboard.press('Enter');
+  await p.getByRole('link',{name:/kalaghar-jewels\.com/}).filter({visible:true}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
+  await p.getByRole('button',{name:'Analyze & find solution'}).first().focus(); await p.keyboard.press('Enter');
   await p.waitForURL(/\/diagnostics\//, {timeout: 10000}).catch(() => undefined);
-  await p.waitForSelector('#obs-h', {timeout: 10000}).catch(() => undefined);
-  ok(`${tag}: Analyze opens the diagnostic report`, /\/diagnostics\//.test(p.url()) && await p.locator('#obs-h').isVisible());
+  await p.waitForSelector('#q1', {timeout: 10000}).catch(() => undefined);
+  ok(`${tag}: Analyze opens the diagnostic report`, /\/diagnostics\//.test(p.url()) && await p.locator('#q1').isVisible());
   ok(`${tag}: report offers no "Fix now"`, (await p.getByRole('button',{name:/fix now/i}).count()) === 0);
   await c.close();
 }

@@ -15,7 +15,7 @@ class WorkspaceController
     public function index(): JsonResponse
     {
         $rows = DB::select(
-            'SELECT w.id, w.name, w.kind, m.role, w.closed_at FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
+            'SELECT w.id, w.name, w.kind, m.role, w.closed_at, w.is_demo FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
               WHERE m.user_id = ? AND m.suspended_at IS NULL ORDER BY w.name', [TenantContext::userId()]);
         return response()->json(['data' => $rows]);
     }

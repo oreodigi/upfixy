@@ -94,7 +94,7 @@ function site(id: string, s: SiteSpec): Site {
     id, host: s.host, clientId: s.clientId, lane: h.lane, lastVerifiedAt: h.lastVerifiedAt, issues,
     lastObservedAt: observed.length ? new Date(Math.max(...observed)) : null,
     components: {
-      domain: toComponent(dns, 'Resolving'),
+      domain: toComponent(dns, 'Resolves'),
       hosting: s.hosting ?? { state: 'not_connected', label: 'Not connected' },
       ssl: tls.freshness === 'fresh' && (tls.severity === 'warning' || tls.severity === 'critical')
         ? { state: tls.severity === 'critical' ? 'critical' : 'warning', label: s.sslLabel ?? tls.severity }

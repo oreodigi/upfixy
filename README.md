@@ -18,7 +18,7 @@ Requirements: [Upfixy MVP FRD v0.3](docs/FRD.md) (M1 was built against v0.2.1; v
 | [Repair engine](docs/REPAIR_ENGINE.md) | Allowlisted Cloudflare DNS fix: gates, controls, release checklist |
 | [Payments](docs/PAYMENTS.md) | Coverage, Razorpay test-mode flow, webhooks, live lock, receipts, refunds |
 | [Backup and recovery](docs/BACKUP_RECOVERY.md) | Encrypted backups, restore drill, proposed RPO/RTO |
-| [Test results](docs/TEST_RESULTS.md) | Latest exact results and what is not yet tested |
+| [Test results](docs/TEST_RESULTS.md), [UI redesign status](docs/UI_REDESIGN_STATUS.md) | Latest exact results and what is not yet tested |
 
 ## What's here
 

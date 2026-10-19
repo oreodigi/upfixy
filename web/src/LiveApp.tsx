@@ -1,3 +1,5 @@
+import { Bell, Building2, CreditCard, Globe, LayoutDashboard, ListTodo, Plug, Settings, Users, type LucideIcon } from 'lucide-react';
+import { DemoBanner, MobileBottomNav, MobileTopbar, Sidebar, Topbar, type ShellNavItem } from './ui/Shell';
 import { RepairControls } from './pages/Repairs';
 import { Integration, Integrations } from './pages/Integrations';
 import Billing from './pages/Billing';
@@ -182,7 +184,7 @@ function AuthScreen({ onSignedIn, invited }: { onSignedIn: (token: string, ws: s
   );
 }
 
-type NavItem = { to: string; label: string; match: Route['name'][]; icon: string };
+type NavItem = { to: string; label: string; short?: string; match: Route['name'][]; icon: LucideIcon; badge?: number };
 
 function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const route = useRoute();
@@ -196,7 +198,6 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [help, setHelp] = useState<{ issue: Issue; host: string } | null>(null);
   const [verifySite, setVerifySite] = useState<{ id: string; name: string } | null>(null);
-  const [more, setMore] = useState(false);
 
   const current = workspaces.find((w) => w.id === ws);
   const role = current?.role ?? '';
@@ -276,35 +277,32 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
   }), [me, current, role, isAgency, isStaff, canVerify, sites, clients, tickets, loaded, clientsLoaded, reload, openTicket, report]);
 
   const primary: NavItem[] = [
-    { to: '/', label: 'Overview', match: ['overview'], icon: '◎' },
-    ...(isAgency ? [{ to: '/clients', label: 'Clients', match: ['clients', 'client'] as Route['name'][], icon: '▦' }] : []),
-    { to: '/websites', label: 'Websites', match: ['websites', 'website', 'diagnostic'], icon: '◱' },
-    ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work queue' : 'Issues', match: ['work'] as Route['name'][], icon: '☰' }] : []),
+    { to: '/', label: 'Dashboard', short: 'Home', match: ['overview'], icon: LayoutDashboard },
+    ...(isAgency ? [{ to: '/clients', label: 'Clients', match: ['clients', 'client'] as Route['name'][], icon: Building2 }] : []),
+    { to: '/websites', label: 'Websites', match: ['websites', 'website', 'diagnostic'], icon: Globe },
+    ...(role !== 'billing' ? [{ to: '/work', label: isAgency ? 'Work queue' : 'Issues', short: isAgency ? 'Work' : 'Issues', match: ['work'] as Route['name'][], icon: ListTodo }] : []),
   ];
   const secondary: NavItem[] = [
-    { to: '/alerts', label: unread ? `Alerts (${unread})` : 'Alerts', match: ['alerts'], icon: '🔔' },
-    ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: '👥' }] : []),
-    ...(['owner', 'admin', 'billing'].includes(role) ? [{ to: '/billing', label: 'Billing', match: ['billing'] as Route['name'][], icon: '₹' }] : []),
-    ...(['owner', 'admin'].includes(role) ? [{ to: '/integrations', label: 'Integrations', match: ['integrations', 'integration'] as Route['name'][], icon: '⇄' }] : []),
-    { to: '/settings', label: 'Settings', match: ['settings'], icon: '⚙' },
+    { to: '/alerts', label: 'Alerts', match: ['alerts'], icon: Bell, badge: unread },
+    ...(canManageTeam ? [{ to: '/team', label: 'Team', match: ['team'] as Route['name'][], icon: Users }] : []),
+    ...(['owner', 'admin', 'billing'].includes(role) ? [{ to: '/billing', label: 'Billing', match: ['billing'] as Route['name'][], icon: CreditCard }] : []),
+    ...(['owner', 'admin'].includes(role) ? [{ to: '/integrations', label: 'Integrations', match: ['integrations', 'integration'] as Route['name'][], icon: Plug }] : []),
+    { to: '/settings', label: 'Settings', match: ['settings'], icon: Settings },
   ];
   const isOn = (n: NavItem) => n.match.includes(route.name);
-  const link = (n: NavItem, cls: string) => (
-    <a key={n.to} href={n.to} className={cls} aria-current={isOn(n) ? 'page' : undefined}
-      onClick={(e) => { onLinkClick(e); setMore(false); }}>
-      <span className="nav__icon" aria-hidden="true">{n.icon}</span><span className="nav__label">{n.label}</span>
-    </a>
-  );
+  const shell = (items: NavItem[], short = false): ShellNavItem[] =>
+    items.map((n) => ({ to: n.to, label: short ? n.short ?? n.label : n.label, icon: n.icon, current: isOn(n), badge: n.badge }));
 
+  const switchTo = (id: string) => {
+    // Drop everything from the previous workspace before loading the next (AC-ACC-004.1).
+    setClients([]); setSites([]); setTickets([]); setLoaded(false); setClientsLoaded(false); setVerifySite(null); setHelp(null);
+    session.setWorkspace(id); setWs(id);
+    navigate('/', { replace: true });
+  };
   const switcher = workspaces.length > 1 ? (
     <label className="ws-switch">
       <span className="sr-only">Workspace</span>
-      <select value={ws ?? ''} onChange={(e) => {
-        // Drop everything from the previous workspace before loading the next (AC-ACC-004.1).
-        setClients([]); setSites([]); setTickets([]); setLoaded(false); setClientsLoaded(false); setVerifySite(null); setHelp(null); setMore(false);
-        session.setWorkspace(e.target.value); setWs(e.target.value);
-        navigate('/', { replace: true });
-      }}>
+      <select value={ws ?? ''} onChange={(e) => switchTo(e.target.value)}>
         {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}{w.closed_at ? ' (closed)' : ''}</option>)}
       </select>
     </label>
@@ -317,25 +315,24 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
     || r.name === 'work' && role === 'billing'
     || (r.name === 'integrations' || r.name === 'integration') && !['owner', 'admin'].includes(role)
     || r.name === 'billing' && !['owner', 'admin', 'billing'].includes(role);
+  const pageTitle = [...primary, ...secondary].find(isOn)?.label
+    ?? (r.name === 'diagnostic' ? 'Diagnosis' : 'Upfixy');
 
   return (
     <Ctx.Provider value={ctx}>
-      <div className="app">
+      <div className="ux-app">
         <a className="skip" href="#main">Skip to content</a>
         <StepUpDialog />
-        <header className="top">
-          <div className="top__brand">
-            <span className="logo" aria-hidden="true">U</span>
-            <div><p className="top__name">Upfixy</p>{switcher}</div>
-          </div>
-          <nav aria-label="Main" className="nav nav--top">
-            {[...primary, ...secondary].map((n) => link(n, 'tab'))}
-            <button type="button" className="tab" onClick={onSignOut}>Sign out</button>
-          </nav>
-        </header>
+        <Sidebar primary={shell(primary)} secondary={shell(secondary)} switcher={switcher} workspaceKind={current?.kind} siteCount={loaded ? sites.length : undefined} />
+        <div className="ux-content">
+        <MobileTopbar title={pageTitle} subtitle={current?.name ?? 'Loading…'} unread={unread} />
+        <Topbar email={me?.email ?? ''} role={role} unread={unread} onSignOut={onSignOut}
+          searchPlaceholder={isAgency ? 'Search websites, domains or clients' : 'Search your websites'}
+          period={['overview', 'clients', 'websites'].includes(r.name) ? 'Charts: last 24 hours' : undefined} />
         <EmailBanner me={me} />
+        {current?.is_demo && <DemoBanner />}
 
-        <main className="main" id="main" tabIndex={-1}>
+        <main className="ux-main" id="main" tabIndex={-1}>
           {error && <p className="error" role="alert">{error}</p>}
           {!current ? <p className="hint" role="status">Loading…</p>
             : current.closed_at ? <ClosedWorkspace ws={current} />
@@ -343,7 +340,7 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : r.name === 'overview' ? <Overview />
             : r.name === 'clients' ? <ClientsBoard />
             : r.name === 'client' ? <ClientDetail id={r.id} />
-            : r.name === 'websites' ? <WebsitesBoard />
+            : r.name === 'websites' ? <WebsitesBoard key={window.location.search} />
             : r.name === 'website' ? <WebsiteDetail id={r.id} tab={r.tab} />
             : r.name === 'work' ? <Work />
             : r.name === 'team' ? <TeamPanel clients={clients} myRole={role} />
@@ -356,23 +353,9 @@ function Workspace({ onSignOut }: { onSignOut: () => void }) {
             : null}
         </main>
 
-        <nav aria-label="Main" className="nav nav--bottom">
-          {primary.map((n) => link(n, 'bnav'))}
-          <button type="button" className="bnav" aria-expanded={more} aria-controls="more-sheet" onClick={() => setMore(!more)}
-            aria-current={secondary.some(isOn) ? 'page' : undefined}>
-            <span className="nav__icon" aria-hidden="true">⋯</span><span className="nav__label">More{unread ? <span className="badge" aria-label={`${unread} unread alerts`}>{unread}</span> : null}</span>
-          </button>
-        </nav>
-        {more && (
-          <div className="sheet" id="more-sheet" role="dialog" aria-label="More" onKeyDown={(e) => e.key === 'Escape' && setMore(false)}>
-            <div className="sheet__inner">
-              {workspaces.length > 1 && <div className="sheet__ws">{switcher}</div>}
-              {secondary.map((n) => link(n, 'sheet__item'))}
-              <button type="button" className="sheet__item" onClick={onSignOut}><span className="nav__icon" aria-hidden="true">↪</span><span className="nav__label">Sign out</span></button>
-              <button type="button" className="btn btn--quiet" onClick={() => setMore(false)} autoFocus>Close</button>
-            </div>
-          </div>
-        )}
+        </div>
+        <MobileBottomNav primary={shell(primary, true)} secondary={shell(secondary)} switcher={workspaces.length > 1 ? switcher : null}
+          onSignOut={onSignOut} unread={unread} />
 
         <HelpDialog issue={help?.issue ?? null} host={help?.host ?? ''} onClose={() => setHelp(null)} />
         <OwnershipDialog websiteId={verifySite?.id ?? null} name={verifySite?.name ?? ''} onClose={() => { setVerifySite(null); void reload(); }} />

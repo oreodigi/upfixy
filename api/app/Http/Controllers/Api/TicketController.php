@@ -29,8 +29,9 @@ class TicketController
 
     public function show(string $ticket): JsonResponse
     {
-        $t = DB::selectOne('SELECT t.id, t.title, t.state, t.version, t.website_id, t.assignee_id, u.email AS assignee_email
-                              FROM tickets t LEFT JOIN users u ON u.id = t.assignee_id WHERE t.id = ?', [$ticket]);
+        $t = DB::selectOne('SELECT t.id, t.title, t.state, t.version, t.website_id, w.display_name AS website, t.assignee_id, u.email AS assignee_email,
+                                   t.diagnostic_run_id, t.created_at
+                              FROM tickets t JOIN websites w ON w.id = t.website_id LEFT JOIN users u ON u.id = t.assignee_id WHERE t.id = ?', [$ticket]);
         if (!$t) abort(404);
         $t->allowed_next = TicketStates::TRANSITIONS[$t->state];
         $t->quote = QuoteController::forTicket($ticket);
@@ -43,10 +44,16 @@ class TicketController
         $data = $request->validate([
             'website_id' => ['required', 'uuid'],
             'title' => ['required', 'string', 'max:200'],
+            'diagnostic_run_id' => ['nullable', 'uuid'],
         ]);
         if (!DB::selectOne('SELECT 1 AS x FROM websites WHERE id = ?', [$data['website_id']])) abort(404);
-        $id = DB::selectOne('INSERT INTO tickets(workspace_id, website_id, title) VALUES (?, ?, ?) RETURNING id',
-            [TenantContext::workspaceId(), $data['website_id'], $data['title']])->id;
+        // A linked diagnosis must be visible to the caller and belong to the same website (also enforced in the database).
+        if (!empty($data['diagnostic_run_id'])
+            && !DB::selectOne('SELECT 1 AS x FROM diagnostic_runs WHERE id = ? AND website_id = ?', [$data['diagnostic_run_id'], $data['website_id']])) {
+            abort(422, 'That diagnosis is not for this website.');
+        }
+        $id = DB::selectOne('INSERT INTO tickets(workspace_id, website_id, title, diagnostic_run_id) VALUES (?, ?, ?, ?) RETURNING id',
+            [TenantContext::workspaceId(), $data['website_id'], $data['title'], $data['diagnostic_run_id'] ?? null])->id;
         DB::insert("INSERT INTO ticket_events(workspace_id, ticket_id, actor_id, to_state) VALUES (?, ?, ?, 'new')",
             [TenantContext::workspaceId(), $id, TenantContext::userId()]);
         Audit::record('ticket.created', 'allowed', 'ticket', $id);

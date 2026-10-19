@@ -334,4 +334,33 @@ class DiagnosticsTest extends TestCase
         $this->assertSame(0, $this->owner()->table('diagnostic_runs')->count());
         $this->assertSame(0, $this->owner()->table('ai_analyses')->count());
     }
+
+    public function test_a_fix_request_can_link_its_diagnosis_on_the_same_website_only(): void // SVC-001, UX-05 "Request a fix"
+    {
+        $this->site503(3);
+        $run = $this->diagnose()->assertCreated()->json('id');
+        $t = $this->api($this->f['carl'], $this->f['ws'], 'POST', 'tickets',
+            ['website_id' => $this->f['shop'], 'title' => 'Fix the 503', 'diagnostic_run_id' => $run])->assertCreated()->json('id');
+        $this->assertSame($run, $this->api($this->f['carl'], $this->f['ws'], 'GET', "tickets/{$t}")->assertOk()->json('diagnostic_run_id'));
+        $this->assertSame([$t], array_column($this->report($run, $this->f['carl'])->json('tickets'), 'id'));
+
+        // Another website's request cannot borrow this diagnosis (API check and database trigger).
+        $this->api($this->f['olive'], $this->f['ws'], 'POST', 'tickets',
+            ['website_id' => $this->f['secret'], 'title' => 'x', 'diagnostic_run_id' => $run])->assertStatus(422);
+        $this->expectExceptionMessage('the diagnosis belongs to another website');
+        $this->owner()->insert('INSERT INTO tickets(workspace_id, website_id, title, diagnostic_run_id) VALUES (?, ?, ?, ?)',
+            [$this->f['ws'], $this->f['secret'], 'direct', $run]);
+    }
+
+    public function test_a_diagnosis_from_another_workspace_cannot_be_linked(): void // tenant isolation
+    {
+        $this->site503(3);
+        $run = $this->diagnose()->assertCreated()->json('id');
+        [$bobSite] = $this->makeSite($this->f['wsB'], null, 'bob.example');
+        $this->api($this->f['bob'], $this->f['wsB'], 'POST', 'tickets',
+            ['website_id' => $bobSite, 'title' => 'x', 'diagnostic_run_id' => $run])->assertStatus(422);
+        // A client user who cannot see the other client's website cannot link to it either.
+        $this->api($this->f['tom'], $this->f['ws'], 'POST', 'tickets',
+            ['website_id' => $this->f['shop'], 'title' => 'x', 'diagnostic_run_id' => $run])->assertStatus(404);
+    }
 }

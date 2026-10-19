@@ -89,6 +89,8 @@ class DiagnosticController
             'human_review_required' => $snap['rules']['human_review_required'] ?? false,
             'evidence' => $evidence,
             'ai' => $aiOut,
+            // Requests raised from this report (RLS: only those the caller may see).
+            'tickets' => DB::select('SELECT id, title, state::text AS state FROM tickets WHERE diagnostic_run_id = ? ORDER BY created_at DESC', [$run]),
         ] + ($staff ? ['rule_version' => $r->rule_version, 'private_evidence' => $r->private_evidence] : []));
     }
 }
