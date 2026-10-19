@@ -28,7 +28,7 @@ const STEPS: Array<[RepairState | 'approved', string]> = [
 ];
 const END: Partial<Record<RepairState, string>> = { resolved: 'Resolved', rolled_back: 'Rolled back', needs_technician: 'Needs a technician', refused: 'Not run' };
 
-function AttemptProgress({ a }: { a: ApiRepairAttempt }) {
+export function AttemptProgress({ a }: { a: ApiRepairAttempt }) {
   const order: Array<RepairState | 'approved'> = ['approved', 'preflight', 'executing', 'verifying'];
   const at = END[a.state] ? 4 : Math.max(0, order.indexOf(a.state === 'queued' ? 'approved' : a.state));
   return (

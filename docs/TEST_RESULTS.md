@@ -1,6 +1,6 @@
 # Test results
 
-Run on 19 Oct 2026 (IST) on branch `hardening`, which contains `main` + M4 + M6 + hardening. Run locally against PostgreSQL 16, PHP 8.3 and Node 22. CI runs the same suites on every push.
+UI branch `ui-redesign` re-run on 19 Oct 2026 after UI phase 2 (numbers below). Earlier run on 19 Oct 2026 (IST) on branch `hardening`, which contains `main` + M4 + M6 + hardening. Run locally against PostgreSQL 16, PHP 8.3 and Node 22. CI runs the same suites on every push.
 
 **Passing tests are not readiness.** Nothing here was run against:
 - a real Cloudflare, WHM or cPanel account;
@@ -12,12 +12,12 @@ Run on 19 Oct 2026 (IST) on branch `hardening`, which contains `main` + M4 + M6 
 | Suite | Command | Result |
 | --- | --- | --- |
 | Shared rules (TS) | `npm test -w packages/core` | **180 passed** |
-| Database / RLS / grants | `npm test -w db` | **86 passed** |
+| Database / RLS / grants | `npm test -w db` | **87 passed** |
 | Web unit | `npm test -w web` | **23 passed** |
 | Typecheck web + core | `npm run typecheck` | pass |
-| API (PHPUnit) | `npm run test:api` | **315 passed, 4,489 assertions** (adds MetricsTest, UI branch) |
+| API (PHPUnit) | `npm run test:api` | **317 passed, 4,500 assertions** (UI branch: MetricsTest + ticket↔diagnosis link) |
 | End to end (running servers) | `python3 scripts/e2e.py` | **40/40 passed** |
-| Screens + axe WCAG 2.1 AA | `node scripts/screens.mjs` | **26 screens × 3 widths: 78/78 clean, 0 overflow** |
+| Screens + axe WCAG 2.1 AA | `node scripts/screens.mjs` | **29 screens × 4 widths (320, 390, 768, 1440): 116/116 clean, 0 overflow** |
 | Keyboard only | `node scripts/keyboard.mjs` | **31 PASS** |
 | Restore drill | `ops/restore-drill.sh` | **passed** (see [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md)) |
 | AI model comparison | `php artisan upfixy:ai-eval` | **not run**: needs an approved API key ([AI_MODEL_EVALUATION.md](AI_MODEL_EVALUATION.md)) |

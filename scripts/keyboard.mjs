@@ -64,17 +64,17 @@ for (const vp of [{width:390,height:844},{width:1440,height:900}]) {
   await p.goto(B+'/websites',{waitUntil:'networkidle'});
   await p.goto(B+'/websites?q=mitratraders',{waitUntil:'networkidle'}); await p.getByRole('link',{name:/mitratraders/}).filter({visible:true}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
   await p.getByRole('tab',{name:'Activity',exact:true}).focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
-  const sum = p.locator('details.evidence summary').first(); await sum.focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
-  ok(`${tag}: Enter opens evidence details`, await p.locator('details.evidence[open] .facts').first().isVisible());
+  const sum = p.locator('details.ux-details summary').filter({visible:true}).first(); await sum.focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(150);
+  ok(`${tag}: Enter opens evidence details`, await p.locator('details.ux-details[open] dl.kv').first().isVisible());
   await p.getByRole('button',{name:'Check now'}).focus(); await p.keyboard.press('Enter'); await p.waitForTimeout(500);
-  ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.headline [role=status]').innerText()));
+  ok(`${tag}: Check now reports what it did`, /queued|last 2 minutes/.test(await p.locator('.ux-sitehead__status').innerText()));
   // 9b. M5: Analyze from the keyboard opens the report, which has no "Fix now".
   await p.goto(B+'/websites',{waitUntil:'networkidle'});
   await p.getByRole('link',{name:/kalaghar-jewels\.com/}).filter({visible:true}).first().focus(); await p.keyboard.press('Enter'); await p.waitForLoadState('networkidle');
-  await p.getByRole('button',{name:'Analyze & find solution'}).focus(); await p.keyboard.press('Enter');
+  await p.getByRole('button',{name:'Analyze & find solution'}).first().focus(); await p.keyboard.press('Enter');
   await p.waitForURL(/\/diagnostics\//, {timeout: 10000}).catch(() => undefined);
-  await p.waitForSelector('#obs-h', {timeout: 10000}).catch(() => undefined);
-  ok(`${tag}: Analyze opens the diagnostic report`, /\/diagnostics\//.test(p.url()) && await p.locator('#obs-h').isVisible());
+  await p.waitForSelector('#q1', {timeout: 10000}).catch(() => undefined);
+  ok(`${tag}: Analyze opens the diagnostic report`, /\/diagnostics\//.test(p.url()) && await p.locator('#q1').isVisible());
   ok(`${tag}: report offers no "Fix now"`, (await p.getByRole('button',{name:/fix now/i}).count()) === 0);
   await c.close();
 }

@@ -218,8 +218,9 @@ function LaneEmpty({ lane, noun }: { lane: HealthLane; noun: string }) {
 
 // ------------------------------------------------------------------ add dialog
 export function AddButton({ kind, variant = 'primary' }: { kind: 'website' | 'client'; variant?: 'primary' | 'ghost' }) {
-  const { clients, isAgency, reload } = useWs();
+  const { clients, isAgency, reload, canVerify, openVerify } = useWs();
   const ref = useRef<HTMLDialogElement>(null);
+  const [added, setAdded] = useState<{ id: string; host: string } | null>(null);
   const [value, setValue] = useState('');
   const [client, setClient] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -233,6 +234,7 @@ export function AddButton({ kind, variant = 'primary' }: { kind: 'website' | 'cl
       } else {
         const r = await api<{ id: string; target: { host: string }; note: string | null }>('POST', 'websites', { url: value, client_id: client || null });
         setMsg({ kind: 'ok', text: `Added ${r.target.host}. It shows as "Needs setup" until the first checks run.${r.note ? ' ' + r.note : ''}` });
+        setAdded({ id: r.id, host: r.target.host });
       }
       setValue('');
       await reload();
@@ -241,7 +243,7 @@ export function AddButton({ kind, variant = 'primary' }: { kind: 'website' | 'cl
 
   return (
     <>
-      <button type="button" className={`ux-btn ux-btn--${variant}`} onClick={() => { setMsg(null); ref.current?.showModal(); }}>
+      <button type="button" className={`ux-btn ux-btn--${variant}`} onClick={() => { setMsg(null); setAdded(null); ref.current?.showModal(); }}>
         <Plus aria-hidden="true" />{kind === 'client' ? 'Add client' : 'Add website'}
       </button>
       <dialog ref={ref} className="help" aria-labelledby={`add-${kind}`}>
@@ -261,8 +263,21 @@ export function AddButton({ kind, variant = 'primary' }: { kind: 'website' | 'cl
             </label>
           )}
           {msg && <p className={msg.kind} role={msg.kind === 'error' ? 'alert' : 'status'}>{msg.text}</p>}
+          {added && (
+            <div className="ux-next" aria-label="What happens next">
+              <h3>What happens next</h3>
+              <ol>
+                <li><strong>First checks</strong><span>Website, SSL and DNS checks start on their own. Until they report, the site is shown as “Needs setup”, never as healthy.</span>
+                  <a className="ux-link" href={href({ name: 'website', id: added.id })} onClick={(e) => { ref.current?.close(); onLinkClick(e); }}>Open {added.host}</a></li>
+                <li><strong>Verify ownership (optional)</strong><span>Proves you control the address. Needed before any fix can be approved.</span>
+                  {canVerify && <button type="button" className="ux-link" onClick={() => { ref.current?.close(); openVerify({ id: added.id, name: added.host }); }}>Verify now</button>}</li>
+                <li><strong>Connect DNS or hosting (optional)</strong><span>Read-only connections add private details for deeper diagnosis. Monitoring never depends on them.</span>
+                  <a className="ux-link" href={href({ name: 'integrations' })} onClick={(e) => { ref.current?.close(); onLinkClick(e); }}>Open integrations</a></li>
+              </ol>
+            </div>
+          )}
           <div className="help__actions">
-            <button className="btn">{kind === 'client' ? 'Add client' : 'Add website'}</button>
+            <button className="btn">{kind === 'client' ? 'Add client' : added ? 'Add another' : 'Add website'}</button>
             <button type="button" className="btn btn--quiet" onClick={() => ref.current?.close()}>Done</button>
           </div>
         </form>
@@ -272,14 +287,14 @@ export function AddButton({ kind, variant = 'primary' }: { kind: 'website' | 'cl
 }
 
 // ------------------------------------------------------------------ shared pieces
-function BoardBar({ board, filters, setFilters, counts, shown, total, extra, placeholder }: {
-  board: Board; filters: Filters; setFilters: (f: Filters) => void; counts: Record<HealthLane, number>;
+export function BoardBar({ board, filters, setFilters, counts, shown, total, extra, placeholder }: {
+  board: Board | 'work'; filters: Filters; setFilters: (f: Filters) => void; counts?: Record<HealthLane, number>;
   shown: number; total: number; extra?: React.ReactNode; placeholder: string;
 }) {
   const views = useSavedViews(board, filters, setFilters);
   const layout = filters.layout ?? 'board';
   return (
-    <div className="ux-boardbar">
+    <div className={`ux-boardbar ux-boardbar--${board}`}>
       <div className="ux-toolbar">
         <label className="sr-only" htmlFor={`${board}-q`}>Search</label>
         <input id={`${board}-q`} type="search" className="ux-input ux-input--search" placeholder={placeholder}
@@ -292,7 +307,7 @@ function BoardBar({ board, filters, setFilters, counts, shown, total, extra, pla
           <button type="button" aria-pressed={layout === 'list'} onClick={() => setFilters({ ...filters, layout: 'list' })}><List aria-hidden="true" />List</button>
         </div>
       </div>
-      <LaneFilter counts={counts} selected={filters.lanes ?? []} onChange={(lanes) => { setFilters({ ...filters, lanes }); views.clear(); }} />
+      {counts && <LaneFilter counts={counts} selected={filters.lanes ?? []} onChange={(lanes) => { setFilters({ ...filters, lanes }); views.clear(); }} />}
       <p className="ux-note" role="status" style={{ margin: '8px 0 12px', minHeight: 1 }}>
         {isFiltered(filters) && <>Showing {shown} of {total}. <button type="button" className="ux-link" onClick={() => { setFilters({ layout: filters.layout }); views.clear(); }}>Clear filters</button></>}
       </p>

@@ -150,7 +150,7 @@ export default function Diagnosis({ id }: { id: string }) {
         </div>
       </header>
 
-      <ol className="ux-journey" aria-label="From problem to fix">
+      <ol className="ux-journey" aria-label="From problem to fix" tabIndex={0}>
         {JOURNEY.map((s, i) => (
           <li key={s} className={i < journeyAt ? 'done' : i === journeyAt ? 'now' : ''} aria-current={i === journeyAt ? 'step' : undefined}>
             <span className="ux-journey__dot" aria-hidden="true">{i < journeyAt ? <BadgeCheck /> : i + 1}</span><span>{s}</span>

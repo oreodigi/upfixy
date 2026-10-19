@@ -47,6 +47,7 @@ export interface ApiTicket {
   client_id: string | null;
   has_quote: boolean;
   approved: boolean;
+  updated_at?: string;
 }
 export interface ApiWorkspace { id: string; name: string; kind: 'solo' | 'agency'; role: string; closed_at?: string | null; is_demo?: boolean }
 

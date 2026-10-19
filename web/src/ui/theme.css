@@ -913,3 +913,202 @@ a.ux-kpi:focus-visible { outline: 3px solid color-mix(in srgb, var(--kpi-c) 60%,
 .ux-likely { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 700; color: #b45309; }
 .ux-arealist li { flex-wrap: wrap; }
 .ux-arealist .ux-status { white-space: normal; max-width: 100%; }
+
+/* ===================================================== UX-06 work queue (workflow, not health) */
+.ux-wboard { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; scrollbar-width: thin; }
+.ux-wboard:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; border-radius: 12px; }
+.ux-wlane { min-width: 0; border-radius: 16px; background: #f1f4fa; padding: 10px; display: flex; flex-direction: column; gap: 10px; border: 1.5px dashed transparent; transition: border-color .15s var(--ease), background .15s var(--ease); --st: var(--a-blue); }
+.ux-wlane__head { display: flex; align-items: center; gap: 10px; padding: 4px 4px 2px; }
+.ux-wlane__head > div { flex: 1; min-width: 0; }
+.ux-wlane__head h2 { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ux-wlane__head p { margin: 0; font-size: 12px; color: var(--ink-3); }
+.ux-wlane__icon { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; color: #fff; background: var(--st); }
+.ux-wlane__icon svg { width: 16px; height: 16px; }
+.ux-wlane__empty { margin: 0; padding: 18px 8px; text-align: center; font-size: 13px; color: var(--ink-3); border: 1px dashed var(--line-2); border-radius: 12px; }
+.ux-wlane--ok { border-color: #93b4ff; background: #eef3ff; }
+.ux-wlane--no { opacity: .55; }
+.ux-wlane--over { border-style: solid; border-color: var(--info); }
+.ux-wlane--new { --st: var(--a-blue); }
+.ux-wlane--investigating { --st: var(--a-violet); }
+.ux-wlane--waiting_for_customer { --st: #a16207; }
+.ux-wlane--quote_pending { --st: var(--a-orange); }
+.ux-wlane--ready_for_work { --st: var(--a-aqua); }
+.ux-wlane--in_progress { --st: #4f46e5; }
+.ux-wlane--verifying { --st: #0e7490; }
+.ux-wlane--resolved { --st: var(--a-mint); }
+.ux-wlane--closed { --st: #64748b; }
+
+.ux-tcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 8px; min-width: 0;
+  box-shadow: 0 1px 2px rgba(15, 27, 45, .05), 0 6px 16px -10px rgba(15, 27, 45, .18); }
+.ux-tcard[draggable='true'] { cursor: grab; }
+.ux-tcard--dragging { opacity: .5; }
+.ux-tcard__site { margin: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ux-tcard__site .host { color: var(--ink-2); font-weight: 600; }
+.ux-tcard h3 { margin: 0; font-size: 15px; line-height: 1.3; }
+.title-btn { all: unset; cursor: pointer; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.title-btn:hover { color: var(--info); text-decoration: underline; }
+.title-btn:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; border-radius: 4px; }
+.ux-tcard__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ux-tcard__chips:empty { display: none; }
+.ux-tcard__foot { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); min-width: 0; }
+.ux-tcard__foot .ux-avatar { width: 26px; height: 26px; font-size: 11px; }
+.ux-avatar--none { background: var(--surface-2); color: var(--ink-3); border: 1px dashed var(--line-2); }
+.ux-avatar--none svg { width: 14px; height: 14px; }
+.ux-tcard__who { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ux-tcard__when { color: var(--ink-3); white-space: nowrap; }
+.ux-move { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 8px; }
+.ux-move select { flex: 1; min-width: 0; min-height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); padding: 0 8px; font-size: 13px; color: var(--ink); }
+.ux-mlane { display: grid; gap: 10px; }
+.ux-tk__msg { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+.ux-tk__msg--ok { background: var(--ok-bg); color: var(--ok); }
+.ux-tk__msg--error { background: var(--crit-bg); color: var(--crit); }
+.ux-tk__msg--info { background: var(--info-bg); color: var(--info); }
+
+/* ===================================================== UX-07 support request sheet */
+.ux-tk { width: min(1180px, calc(100vw - 48px)); max-height: calc(100vh - 48px); padding: 0; border: 0; border-radius: 22px; background: var(--canvas); color: var(--ink);
+  box-shadow: 0 30px 80px -20px rgba(11, 23, 48, .45); overflow: auto; }
+.ux-tk::backdrop { background: rgba(11, 23, 48, .5); }
+.ux-tk > *:not(.ux-tk__head) { margin-inline: 24px; }
+.ux-tk__head { position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: flex-start; padding: 20px 24px 16px; margin-bottom: 16px;
+  background: linear-gradient(135deg, #0d1c3d, #16306b); color: #fff; }
+.ux-tk__head .ux-eyebrow { color: #a8bdf0; }
+.ux-tk__head .host { color: #dbe6ff; }
+.ux-tk__headtext { flex: 1; min-width: 0; }
+.ux-tk__head h2 { margin: 2px 0 8px; font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; }
+.ux-tk__head .ux-iconbtn { background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .18); color: #fff; box-shadow: none; flex: none; }
+.ux-tk__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0; font-size: 13px; color: #c9d6f5; }
+.ux-tk__meta > span:not(.ux-status) { display: inline-flex; align-items: center; gap: 6px; }
+.ux-tk__meta svg { width: 15px; height: 15px; }
+.ux-tk__meta .ux-status { background: #fff; }
+.ux-journey--7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ux-tk__grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); padding-bottom: 24px; }
+@media (min-width: 1024px) { .ux-tk__grid { grid-template-columns: minmax(0, 1fr) 320px; } }
+.ux-tk__main, .ux-tk__rail { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.ux-tk__sec, .ux-tk .panel-box { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; min-width: 0;
+  box-shadow: 0 1px 2px rgba(15, 27, 45, .04), 0 10px 30px -18px rgba(15, 27, 45, .18); }
+.ux-tk__sec > h3, .ux-tk .panel-box > h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 16px; }
+.ux-tk__secicon { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: #eef3ff; color: var(--info); flex: none; }
+.ux-tk__secicon svg { width: 17px; height: 17px; }
+.ux-tk__sec p { margin: 0 0 10px; }
+.ux-tk__links, .ux-tk__moves { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ux-tk__moves .ux-btn { justify-content: flex-start; }
+.ux-tk__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 12px 14px; margin-bottom: 12px; border-radius: 14px; background: var(--a-orange-bg); }
+.ux-tk__amount { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: #9a3412; }
+.ux-tk h4 { margin: 14px 0 6px; font-size: 14px; }
+.ux-dl { display: grid; grid-template-columns: minmax(84px, max-content) 1fr; gap: 8px 14px; margin: 0; font-size: 14px; }
+.ux-dl dt { font-weight: 600; color: var(--ink-3); }
+.ux-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ux-tk__note { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; font-weight: 600; font-size: 14px; }
+.ux-tk__note svg { width: 18px; height: 18px; flex: none; }
+.ux-tk__note--ok { background: var(--ok-bg); color: var(--ok); }
+.ux-tk__note--warn { background: var(--warn-bg); color: var(--warn); }
+.ux-tk__approve { display: grid; gap: 10px; justify-items: start; }
+.ux-tk__assignee { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ux-tk__assignee p { margin: 0; flex: 1 1 100%; }
+.ux-form { display: grid; gap: 12px; }
+.ux-form__row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.ux-field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); min-width: 0; }
+.ux-field select, .ux-field input, .ux-field textarea { width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-weight: 400; font-size: 14px; color: var(--ink); box-shadow: var(--shadow-1); }
+.ux-field textarea { min-height: 84px; resize: vertical; }
+.ux-tl { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.ux-tl li { display: grid; grid-template-columns: 14px 1fr; gap: 10px; position: relative; padding-bottom: 14px; }
+.ux-tl li:not(:last-child)::before { content: ''; position: absolute; left: 6px; top: 14px; bottom: 0; width: 2px; background: var(--line); }
+.ux-tl__dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--a-blue); margin-top: 3px; }
+.ux-tl strong { font-size: 13.5px; }
+.ux-tl p { margin: 2px 0; font-size: 13px; color: var(--ink-2); }
+.ux-tl time { font-size: 12px; color: var(--ink-3); }
+/* Existing repair/payment panels inside the sheet, mapped onto the design tokens. */
+.ux-tk .btn { min-height: 42px; border-radius: 12px; padding: 0 16px; background: linear-gradient(180deg, #2f73ff, #1d5ce6); box-shadow: 0 6px 16px rgba(37, 99, 235, .3); }
+.ux-tk .btn--quiet { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.ux-tk .change { border-radius: 14px; background: var(--surface-2, #f6f8fc); border: 1px solid var(--line); padding: 4px 14px; }
+.ux-tk .pay { display: grid; gap: 8px; margin-top: 10px; }
+.ux-tk .pay .status { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2, #f6f8fc); }
+.ux-tk .field { display: grid; gap: 6px; font-weight: 600; font-size: 13px; }
+.ux-tk .field input, .ux-tk .field select { min-height: 42px; border-radius: 12px; border: 1px solid var(--line); padding: 0 12px; }
+@media (max-width: 1023px) {
+  .ux-tk { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .ux-tk > *:not(.ux-tk__head) { margin-inline: 16px; }
+  .ux-tk__head { padding: 14px 16px 12px; margin-bottom: 12px; }
+  .ux-tk__head h2 { font-size: 19px; }
+  .ux-tk .ux-journey { margin-inline: 16px; border-radius: 14px; border-inline: 1px solid var(--line); }
+  .ux-tk__amount { font-size: 26px; }
+  .ux-wboard { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .ux-wlane, .ux-tcard { transition: none; } }
+@media (max-width: 1023px) {
+  .ux-boardbar--work .ux-toolbar { flex-wrap: wrap; }
+  .ux-boardbar--work .ux-input--search { order: 1; flex: 1 1 0; min-width: 0; }
+  .ux-boardbar--work .ux-seg { order: 2; }
+  .ux-boardbar--work .ux-toolbar > label { order: 3; flex: 1 1 40%; min-width: 0; }
+  .ux-boardbar--work .ux-toolbar > label .ux-select { width: 100%; }
+}
+.ux-tk__why { font-weight: 500; color: var(--ink-3); }
+.ux-tk .change dl { font-size: 14px; }
+.ux-tk .change code { font-size: 14px; }
+.ux-tk .steps li { font-size: 14px; }
+
+/* ===================================================== UX-08 legacy bridge
+   Screens not yet rebuilt (Alerts, Integrations, Billing, Team, Settings, client detail,
+   dialogs) keep their markup and behaviour; these rules map their classes onto the
+   design tokens so the whole product reads as one system. */
+.ux-content .page { gap: 18px; }
+.ux-content .page > h1, .ux-content .headline h1, .ux-content .panel > h1 { font-size: clamp(24px, 1.2rem + 1vw, 30px); font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.ux-content .headline__sub, .ux-content .page > .hint:first-of-type { font-size: 14.5px; color: var(--ink-2); max-width: 80ch; }
+.ux-content .panel { max-width: 920px; }
+.ux-content .panel-box, .ux-content .panel > form.add, .ux-content .table-wrap {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+  box-shadow: 0 1px 2px rgba(15, 27, 45, .04), 0 10px 30px -18px rgba(15, 27, 45, .18); }
+.ux-content .table-wrap { padding: 4px 8px; }
+.ux-content .panel-box > h2:first-child, .ux-content .panel-box > h3:first-child { font-size: 17px; font-weight: 700; margin: 0 0 6px; color: var(--ink); }
+.ux-content .btn, dialog.help .btn { min-height: 42px; border-radius: 12px; padding: 0 18px; font-weight: 700; color: #fff;
+  background: linear-gradient(180deg, #2f73ff, #1d5ce6); box-shadow: 0 6px 16px rgba(37, 99, 235, .28); }
+.ux-content .btn:hover, dialog.help .btn:hover { box-shadow: 0 8px 22px rgba(37, 99, 235, .4); }
+.ux-content .btn--quiet, dialog.help .btn--quiet { color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-1); }
+.ux-content .btn--danger { background: linear-gradient(180deg, #e5484d, #c81e1e); box-shadow: 0 6px 16px rgba(200, 30, 30, .25); }
+.ux-content .btn--sm, dialog.help .btn--sm { min-height: 34px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+.ux-content .btn:disabled { opacity: .55; cursor: not-allowed; }
+.ux-content .field, dialog.help .field { font-size: 13px; font-weight: 600; color: var(--ink-2); gap: 6px; }
+.ux-content .field input, .ux-content .field select, .ux-content .field textarea,
+dialog.help .field input, dialog.help .field select, dialog.help .field textarea {
+  min-height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); padding: 8px 12px; font: inherit; font-weight: 400; font-size: 14px; color: var(--ink); box-shadow: var(--shadow-1); }
+.ux-content .field input:focus, .ux-content .field select:focus, .ux-content .field textarea:focus,
+dialog.help .field input:focus, dialog.help .field select:focus { outline: 3px solid #bcd0ff; outline-offset: 0; border-color: var(--info); }
+.ux-content .choice label, dialog.help .choice label { border-radius: 12px; border-color: var(--line); background: var(--surface); min-height: 46px; font-weight: 500; }
+.ux-content .choice label:has(input:checked), dialog.help .choice label:has(input:checked) { border-color: var(--info); box-shadow: inset 0 0 0 1px var(--info); background: #f3f7ff; }
+.ux-content .rows { gap: 10px; }
+.ux-content .row { border: 1px solid var(--line); border-left-width: 4px; border-radius: 14px; background: var(--surface); padding: 12px 16px; box-shadow: var(--shadow-1); }
+.ux-content .rows .row:first-child { border-top: 1px solid var(--line); }
+.ux-content .row--critical { border-left-color: var(--crit); }
+.ux-content .row--warning { border-left-color: #e08a00; }
+.ux-content .row--ok { border-left-color: var(--ok); }
+.ux-content .row__main a, .ux-content .link { color: var(--info); font-weight: 600; text-decoration: none; }
+.ux-content .row__main a:hover, .ux-content .link:hover { text-decoration: underline; }
+.ux-content .link--danger { color: var(--crit); }
+.ux-content .ok, dialog.help .ok { border-radius: 12px; background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.ux-content .error, dialog.help .error { border-radius: 12px; background: var(--crit-bg); color: var(--crit); font-weight: 600; }
+.ux-content .banner, dialog.help .banner { border-radius: 12px; background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
+.ux-content .notice { border-radius: 16px; background: #f3f6fb; border: 1px dashed var(--line-2); }
+.ux-content .list th, .ux-content .list td { padding: 12px; border-bottom-color: var(--line); }
+.ux-content .list thead th { background: transparent; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
+.ux-content .tag { border-radius: 999px; font-weight: 600; }
+@media (min-width: 1200px) {
+  /* Long forms read better in a centred column than stretched across 1,100 px. */
+  .ux-content .page > .panel-box form, .ux-content .page > form { max-width: 760px; }
+}
+/* Dialogs (Help me understand, ownership, add website, step-up): rounded sheet on desktop, full width on phones. */
+dialog.help { border-radius: 20px; padding: 22px 24px; box-shadow: 0 30px 80px -20px rgba(11, 23, 48, .45); }
+dialog.help::backdrop { background: rgba(11, 23, 48, .5); }
+dialog.help h2 { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+dialog.help .instructions { border-radius: 14px; background: #f6f8fc; border: 1px solid var(--line); padding: 12px 14px; }
+@media (max-width: 600px) {
+  dialog.help { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; max-height: 92dvh; padding: 18px 16px 24px; }
+}
+.ux-next { border-radius: 14px; background: #f6f8fc; border: 1px solid var(--line); padding: 12px 14px; }
+.ux-next h3 { margin: 0 0 8px; font-size: 15px; }
+.ux-next ol { margin: 0; padding: 0; list-style: none; counter-reset: n; display: grid; gap: 10px; }
+.ux-next li { counter-increment: n; display: grid; grid-template-columns: 26px 1fr; column-gap: 10px; font-size: 13.5px; }
+.ux-next li::before { content: counter(n); grid-row: span 3; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--info); color: #fff; font-weight: 800; font-size: 12px; }
+.ux-next li span { color: var(--ink-2); }
+.ux-next li .ux-link { justify-self: start; padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: var(--info); cursor: pointer; }
+.ux-content .panel .btn, .ux-content .panel-box .btn { justify-self: start; }
+.ux-journey:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; }

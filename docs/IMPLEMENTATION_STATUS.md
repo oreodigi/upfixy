@@ -27,6 +27,7 @@ Requirements: [FRD v0.3](FRD.md). Updated after every completed feature. Nothing
 | M6 Commercial support | Tests passed (scripted Razorpay, test mode only) | #10 | **Blocked:** D-05, D-06, D-08, D-13, D-14, D-18, D-23; Razorpay sandbox account |
 | M7 Controlled repairs | Tests passed (fake provider); disabled | #7 (merged), #11 | **Blocked:** test-zone run, C-1…C-5, restore drill on staging, pilot sign-off |
 | Security hardening | Tests passed | #11 | Off-host anchors, webhook service split (see SECURITY.md) |
+| UI redesign v1 (UX-01…08) | Tests passed; awaiting founder review | #12 | Founder review of phase-2 screenshots; real phone + screen reader check; payment/integration screens are fully live only once #8/#10 merge ([UI_REDESIGN_STATUS.md](UI_REDESIGN_STATUS.md)) |
 
 ## Features
 
@@ -85,3 +86,9 @@ All response shapes are **EXT, unverified** until run against pilot test account
 | C-8 | NFR-14 deletion | Soft close + 30-day reopen; final deletion waits for D-12 |
 | C-9 | §14 connector ≠ domain control | Import never creates ownership; provider facts need proof |
 | C-10 | §19.1 merchant identity on quotes | Recommendation D-06 implemented as "each agency is its own Razorpay merchant"; platform commission (D-05) not implemented |
+
+## UI branch additions (#12)
+
+- SVC-001: a fix request can link the diagnosis it came from (`tickets.diagnostic_run_id`, migration 0018, same-website trigger). `POST tickets` accepts `diagnostic_run_id`; `GET tickets/{id}` and `GET diagnostics/{id}` return the link. Tests: DiagnosticsTest (2 new).
+- AC-UI-12: `is_demo` workspace flag (migration 0017) drives the Demonstration data banner.
+- `GET boards/metrics` (read-only aggregation) for dashboard charts. Test: MetricsTest.

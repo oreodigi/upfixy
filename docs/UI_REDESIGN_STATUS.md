@@ -1,4 +1,20 @@
-# UI redesign: status (phase 1, revision 2)
+# UI redesign: status (phase 2)
+
+**Phase 2 (19 Oct 2026)** finishes UX-04…08 on the approved direction. Every screen uses real API data; where an API doesn't exist the screen says so.
+
+| Screen | What it does now | Endpoints |
+| --- | --- | --- |
+| UX-04 Website detail | Header with health, ownership and last check; six KPIs (uptime, response, SSL, domain, security "Not assessed", backups "Not connected"); tabs Overview / Domain / SSL / Errors / Hosting / Security / Backups / Activity; problems with Help me understand; response chart; incidents; area status; requests; past diagnoses | `websites/{id}`, `websites/{id}/history`, `boards/metrics`, `websites/{id}/diagnostics`, `websites/{id}/dns-connections`, `websites/{id}/providers`, `POST websites/{id}/recheck`, `POST websites/{id}/diagnose` |
+| UX-05 Diagnosis | The seven customer questions in order. Measured facts ("Measured"), rule-based causes (confidence badge) and AI suggestions (dashed violet "AI suggestion · not verified") look different. "Can Upfixy fix it?" is decided from repair controls + a live DNS connection + the issue type; otherwise "A technician needs to do this". Cost from the price list, likely tier highlighted, "₹0 still needs your approval". **No repair button**: "Request a fix" opens a request linked to this diagnosis | `diagnostics/{id}`, `repair-controls`, `actions`, `POST tickets` |
+| UX-06 Work queue | Workflow lanes (never health colours), KPIs, search, assignee and stage filters, saved views, board/list. Desktop: drag or "Move to"; phones: one stage at a time with a stage picker | `tickets`, `POST tickets/{id}/transition`, `views` |
+| UX-07 Support request | Full-height sheet (full screen on phones): stepper Request → Analysis → Quote → Approval → Payment → Fix → Verification computed from server facts; problem with link to its diagnosis; quote with price, scope, exact change and expiry; approval (payer only, ₹0 included); payment (Razorpay test mode); repair preview / progress; assignment; stage moves from `allowed_next` (moves needing approval or payment are disabled with the reason); timeline from `events` | `tickets/{id}`, `tickets/{id}/assignable`, `PATCH tickets/{id}/assignee`, `tickets/{id}/quotes`, `tickets/{id}/approvals`, `tickets/{id}/payments`, `approvals/{id}/checkout`, `tickets/{id}/repairs`, `repair-drafts`, `approvals/{id}/repairs`, `repair-attempts/{id}` |
+| UX-08 Onboarding, dialogs, settings | "Add website" shows what happens next (first checks, verify ownership, connect DNS/hosting). Alerts, Integrations, Billing, Team, Settings, client detail and all dialogs are mapped onto the design tokens (cards, inputs, buttons, notices, bottom sheet on phones) without changing their behaviour | unchanged |
+
+**Backend change in this phase:** migration `0018_ticket_diagnosis_link.sql` adds `tickets.diagnostic_run_id` (composite FK in the same workspace, plus a trigger that refuses a diagnosis from another website). `POST tickets` accepts it (422 if it isn't visible or is for another website); `GET tickets/{id}` and `GET diagnostics/{id}` return the link. Tests: `DiagnosticsTest::test_a_fix_request_can_link_its_diagnosis_on_the_same_website_only`, `…_from_another_workspace_cannot_be_linked`.
+
+**Safety rules kept:** no repair can start from the diagnosis page; the automated-fix button appears only when the server reports an approved, paid (or ₹0) quote in "Ready for work", and the server still checks repair controls (currently off platform-wide). Approval is explicit even at ₹0.
+
+# Phase 1, revision 2
 
 **Revision 2 (19 Oct 2026)** moves UX-01…03 closer to the founder references:
 - KPI cards: gradient icon discs, larger values, and trends drawn only from real hourly series (Healthy = availability per hour; Critical = failed checks per hour).
@@ -51,5 +67,6 @@ It is covered by `MetricsTest` (values, null gaps, workspace isolation, client-o
 
 ## Not yet done
 
-- UX-04…08 (website detail, diagnostics, work queue, quote and resolution, settings, alerts): these still use the earlier styles inside the new shell.
-- Checks at 768 px and 1920 px, and on real devices with a screen reader (AC-UI-09).
+- Alerts, Integrations, Billing, Team and Settings keep their earlier layouts (restyled, not rebuilt).
+- Checks at 1920 px, and on real devices with a screen reader (AC-UI-09). 768 px is now in the automated audit.
+- Security and backup areas show "Not assessed" / "Not connected" until those connectors exist.
